@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TTR v3</title>
+    <title>TTR v4</title>
     <style>
         /* CORE STYLES */
         body {
@@ -39,9 +39,14 @@
             pointer-events: auto;
         }
 
-        #fps-counter {
+        #version-display { /* New */
             top: 10px;
             left: 10px;
+        }
+        
+        #fps-counter { /* Relocated */
+            top: 40px;
+            right: 10px;
         }
 
         #pause-btn {
@@ -83,7 +88,7 @@
             color: #000;
         }
         
-        /* DEBUG OVERLAY (New) */
+        /* DEBUG OVERLAY */
         #debug-overlay {
             display: none;
             position: absolute;
@@ -97,6 +102,9 @@
             font-size: 12px;
             box-sizing: border-box;
             padding: 5px;
+            /* Usability Upgrade */
+            user-select: text;
+            -webkit-user-select: text;
         }
     </style>
 </head>
@@ -105,6 +113,7 @@
     <canvas id="gameCanvas"></canvas>
 
     <div id="ui-layer">
+        <div id="version-display" class="hud-text">v4</div>
         <div id="fps-counter" class="hud-text">FPS: 60</div>
         <div id="pause-btn" class="hud-text">PAUSE</div>
 
@@ -112,6 +121,7 @@
             <h3>PAUSED</h3>
             <button id="btn-toggle-fps" class="modal-btn active">Show FPS: ON</button>
             <button id="btn-auto-fire" class="modal-btn active">Mobile Auto-Fire: ON</button>
+            <button id="btn-copy-log" class="modal-btn">Copy Log</button>
             <button id="btn-show-debug" class="modal-btn">Show Debug Log</button>
             <button id="btn-close-pause" class="modal-btn" style="background: #800;">CLOSE</button>
         </div>
@@ -121,37 +131,30 @@
 
     <script>
         /** 
-         * TTR ENGINE v3
-         * Changes: Offscreen Grid (Performance!), Robust Audio Fix, On-Device Debug Log, UI/Control Refinements
+         * TTR ENGINE v4
+         * Changes: Guaranteed Audio Fix, UI Layout, Debug Usability
          */
+
+        const VERSION = "v4";
 
         // --- CONSTANTS & CONFIG ---
         const CONFIG = {
-            playerSpeed: 250,
-            fireRate: 1.0,         // Corrected from 0.2 to 1.0
-            bulletSpeed: 600,
-            bulletLife: 1.0,
-            bgColor: '#333333',
-            gridColor: '#444444',
-            gridSize: 50
+            playerSpeed: 250, fireRate: 1.0, bulletSpeed: 600, bulletLife: 1.0,
+            bgColor: '#333333', gridColor: '#444444', gridSize: 50
         };
 
         // --- STATE MANAGEMENT ---
         const STATE = {
-            lastTime: 0,
-            showFPS: true,
-            mobileAutoFire: true,
-            isMobile: false,
-            isPaused: false,
-            audioInitialized: false
+            lastTime: 0, showFPS: true, mobileAutoFire: true,
+            isMobile: false, isPaused: false, audioInitialized: false
         };
 
-        // --- DEBUG SYSTEM (New) ---
+        // --- DEBUG SYSTEM ---
         const DEBUG_LOG = [];
         function log(message) {
             const timestamp = new Date().toLocaleTimeString();
             DEBUG_LOG.push(`[${timestamp}] ${message}`);
-            console.log(message); // Also log to browser console
+            console.log(message);
         }
         
         // --- AUDIO ENGINE ---
@@ -163,14 +166,19 @@
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
                 audioCtx = new AudioContext();
                 STATE.audioInitialized = true;
-                log("Audio Context Initialized Successfully");
+                log("Audio Context Initialized Successfully.");
             } catch (e) {
                 log("Error: Web Audio API not supported.");
             }
         }
 
         function playShootSound() {
-            if (!audioCtx || audioCtx.state === 'suspended') return;
+            if (!audioCtx) return;
+            // THE AUDIO FIX: Force resume on every shot if needed.
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.type = 'square';
@@ -186,11 +194,8 @@
 
         // --- INPUT STATE ---
         const INPUT = {
-            keys: {},
-            mouse: { x: 0, y: 0, down: false },
-            moveVector: { x: 0, y: 0 },
-            aimAngle: 0,
-            isFiring: false,
+            keys: {}, mouse: { x: 0, y: 0, down: false }, moveVector: { x: 0, y: 0 },
+            aimAngle: 0, isFiring: false,
             touches: {
                 leftId: null, leftStart: { x: 0, y: 0 }, leftCurr: { x: 0, y: 0 },
                 rightId: null, rightStart: { x: 0, y: 0 }, rightCurr: { x: 0, y: 0 }
@@ -204,15 +209,17 @@
         // --- DOM & CANVAS ---
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d', { alpha: false });
-        let gridCanvas = null; // Offscreen canvas for grid (New)
+        let gridCanvas = null;
 
+        const versionDiv = document.getElementById('version-display');
         const fpsDiv = document.getElementById('fps-counter');
         const pauseModal = document.getElementById('pause-modal');
         const debugOverlay = document.getElementById('debug-overlay');
         
         // --- INITIALIZATION ---
         function init() {
-            log("Initializing TTR v3");
+            log(`Initializing TTR ${VERSION}`);
+            versionDiv.innerText = VERSION;
             resize();
             window.addEventListener('resize', resize);
             
@@ -222,7 +229,6 @@
             setupInputs();
             setupUI();
             
-            // One-time audio unlocker
             const unlockAudio = () => {
                 initAudio();
                 window.removeEventListener('touchstart', unlockAudio);
@@ -242,13 +248,12 @@
             log(`Canvas resized to ${canvas.width}x${canvas.height}. Grid re-rendered.`);
         }
 
-        // --- PERFORMANCE OPTIMIZATION (New) ---
+        // --- PERFORMANCE OPTIMIZATION ---
         function createGridBackground() {
             gridCanvas = document.createElement('canvas');
             gridCanvas.width = canvas.width;
             gridCanvas.height = canvas.height;
             const gridCtx = gridCanvas.getContext('2d');
-
             gridCtx.fillStyle = CONFIG.bgColor;
             gridCtx.fillRect(0, 0, gridCanvas.width, gridCanvas.height);
             gridCtx.strokeStyle = CONFIG.gridColor;
@@ -258,7 +263,7 @@
                 gridCtx.moveTo(x, 0); gridCtx.lineTo(x, gridCanvas.height);
             }
             for (let y = 0; y < gridCanvas.height; y += CONFIG.gridSize) {
-                gridCtx.moveTo(0, y); gridCtx.lineTo(gridCanvas.width, y);
+                gridCtx.moveTo(0, y); gridCtx.lineTo(canvas.width, y);
             }
             gridCtx.stroke();
         }
@@ -278,12 +283,8 @@
         function handleTouch(e) {
             e.preventDefault();
             STATE.isMobile = true;
-            
-            // Reset joysticks
             INPUT.touches.leftId = null;
             INPUT.touches.rightId = null;
-
-            // Find current touches
             for (let touch of e.touches) {
                 if (touch.clientX < canvas.width / 2 && INPUT.touches.leftId === null) {
                     INPUT.touches.leftId = touch.identifier;
@@ -316,7 +317,6 @@
                     let dy = INPUT.touches.rightCurr.y - INPUT.touches.rightStart.y;
                     if (dx !== 0 || dy !== 0) INPUT.aimAngle = Math.atan2(dy, dx);
                 }
-                // Refined Firing Logic
                 INPUT.isFiring = STATE.mobileAutoFire && INPUT.touches.rightId !== null;
             } else {
                 INPUT.moveVector = { x: 0, y: 0 };
@@ -367,9 +367,7 @@
 
         // --- RENDER ---
         function draw() {
-            // THE PERFORMANCE FIX: Draw pre-rendered grid
             ctx.drawImage(gridCanvas, 0, 0);
-
             ctx.strokeStyle = '#ffff00';
             ctx.lineWidth = 3;
             ctx.beginPath();
@@ -380,7 +378,6 @@
                 ctx.lineTo(b.x, b.y);
             }
             ctx.stroke();
-
             ctx.save();
             ctx.translate(PLAYER.x, PLAYER.y);
             ctx.rotate(INPUT.aimAngle);
@@ -390,7 +387,6 @@
             ctx.fillStyle = PLAYER.barrelColor;
             ctx.fillRect(0, -5, PLAYER.radius * 2, 10);
             ctx.restore();
-
             if (INPUT.touches.leftId !== null) drawJoystick(INPUT.touches.leftStart, INPUT.touches.leftCurr);
             if (INPUT.touches.rightId !== null) drawJoystick(INPUT.touches.rightStart, INPUT.touches.rightCurr);
         }
@@ -414,38 +410,45 @@
             const btnToggleFPS = document.getElementById('btn-toggle-fps');
             const btnAutoFire = document.getElementById('btn-auto-fire');
             const btnShowDebug = document.getElementById('btn-show-debug');
+            const btnCopyLog = document.getElementById('btn-copy-log');
 
             btnPause.onclick = () => {
                 STATE.isPaused = true;
                 pauseModal.style.display = 'block';
-                debugOverlay.style.display = 'none'; // Hide debug on pause
+                debugOverlay.style.display = 'none';
             };
-
             btnClose.onclick = () => {
                 STATE.isPaused = false;
                 pauseModal.style.display = 'none';
                 debugOverlay.style.display = 'none';
                 STATE.lastTime = performance.now();
             };
-
             btnToggleFPS.onclick = () => {
                 STATE.showFPS = !STATE.showFPS;
                 fpsDiv.style.display = STATE.showFPS ? 'block' : 'none';
                 btnToggleFPS.innerText = `Show FPS: ${STATE.showFPS ? 'ON' : 'OFF'}`;
                 btnToggleFPS.classList.toggle('active', STATE.showFPS);
             };
-
             btnAutoFire.onclick = () => {
                 STATE.mobileAutoFire = !STATE.mobileAutoFire;
                 btnAutoFire.innerText = `Mobile Auto-Fire: ${STATE.mobileAutoFire ? 'ON' : 'OFF'}`;
                 btnAutoFire.classList.toggle('active', STATE.mobileAutoFire);
             };
-
             btnShowDebug.onclick = () => {
                 pauseModal.style.display = 'none';
                 debugOverlay.style.display = 'block';
                 debugOverlay.innerHTML = DEBUG_LOG.map(msg => `<div>${msg}</div>`).join('');
-                debugOverlay.scrollTop = debugOverlay.scrollHeight; // Auto-scroll to bottom
+                debugOverlay.scrollTop = debugOverlay.scrollHeight;
+            };
+            btnCopyLog.onclick = () => {
+                const logText = DEBUG_LOG.join('\n');
+                navigator.clipboard.writeText(logText).then(() => {
+                    log("Log copied to clipboard!");
+                    alert("Debug log copied to clipboard!");
+                }).catch(err => {
+                    log("Error copying log to clipboard.");
+                    alert("Could not copy log. See console for details.");
+                });
             };
         }
 
