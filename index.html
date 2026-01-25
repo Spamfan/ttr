@@ -3,22 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TTR v2</title>
+    <title>TTR v3</title>
     <style>
-        /* CORE STYLES - WINDOWS 98 EFFICIENCY MENTALITY */
+        /* CORE STYLES */
         body {
             margin: 0;
             padding: 0;
-            background-color: #222;
-            overflow: hidden; /* Prevent scrollbars */
-            touch-action: none; /* Disable browser zooming/scrolling gestures */
+            background-color: #000;
+            overflow: hidden;
+            touch-action: none;
             font-family: 'Courier New', Courier, monospace;
             color: white;
             user-select: none;
             -webkit-user-select: none;
         }
 
-        /* CANVAS */
         canvas {
             display: block;
         }
@@ -30,10 +29,9 @@
             left: 0;
             width: 100%;
             height: 100%;
-            pointer-events: none; /* Let clicks pass through to canvas */
+            pointer-events: none;
         }
 
-        /* HUD ELEMENTS */
         .hud-text {
             position: absolute;
             background: rgba(0, 0, 0, 0.5);
@@ -44,19 +42,18 @@
         #fps-counter {
             top: 10px;
             left: 10px;
-            display: block; /* Toggled via JS */
         }
 
-        #settings-btn {
+        #pause-btn {
             top: 10px;
             right: 10px;
             cursor: pointer;
             border: 1px solid #fff;
         }
 
-        /* SETTINGS MODAL */
-        #settings-modal {
-            display: none; /* Hidden by default */
+        /* PAUSE MODAL */
+        #pause-modal {
+            display: none;
             position: absolute;
             top: 50%;
             left: 50%;
@@ -82,42 +79,58 @@
         }
 
         .modal-btn.active {
-            background: #00ff00;
+            background: #00dd00;
             color: #000;
+        }
+        
+        /* DEBUG OVERLAY (New) */
+        #debug-overlay {
+            display: none;
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 30%;
+            background: rgba(0,0,0,0.7);
+            pointer-events: auto;
+            overflow-y: scroll;
+            font-size: 12px;
+            box-sizing: border-box;
+            padding: 5px;
         }
     </style>
 </head>
 <body>
 
-    <!-- THE GAME CANVAS -->
     <canvas id="gameCanvas"></canvas>
 
-    <!-- UI LAYER -->
     <div id="ui-layer">
         <div id="fps-counter" class="hud-text">FPS: 60</div>
-        <div id="settings-btn" class="hud-text">SETTINGS</div>
+        <div id="pause-btn" class="hud-text">PAUSE</div>
 
-        <!-- SETTINGS MODAL -->
-        <div id="settings-modal">
-            <h3>SETTINGS</h3>
+        <div id="pause-modal">
+            <h3>PAUSED</h3>
             <button id="btn-toggle-fps" class="modal-btn active">Show FPS: ON</button>
             <button id="btn-auto-fire" class="modal-btn active">Mobile Auto-Fire: ON</button>
-            <button id="btn-close-settings" class="modal-btn" style="background: #800;">CLOSE</button>
+            <button id="btn-show-debug" class="modal-btn">Show Debug Log</button>
+            <button id="btn-close-pause" class="modal-btn" style="background: #800;">CLOSE</button>
         </div>
+        
+        <div id="debug-overlay"></div>
     </div>
 
     <script>
         /** 
-         * TTR ENGINE v2
-         * Changes: Bullet Physics, Audio Engine, Input Visual Fixes
+         * TTR ENGINE v3
+         * Changes: Offscreen Grid (Performance!), Robust Audio Fix, On-Device Debug Log, UI/Control Refinements
          */
 
         // --- CONSTANTS & CONFIG ---
         const CONFIG = {
-            playerSpeed: 250,      // Pixels per second
-            fireRate: 0.2,         // Seconds between shots
-            bulletSpeed: 600,      // Pixels per second
-            bulletLife: 1.0,       // Seconds before bullet dies
+            playerSpeed: 250,
+            fireRate: 1.0,         // Corrected from 0.2 to 1.0
+            bulletSpeed: 600,
+            bulletLife: 1.0,
             bgColor: '#333333',
             gridColor: '#444444',
             gridSize: 50
@@ -128,45 +141,45 @@
             lastTime: 0,
             showFPS: true,
             mobileAutoFire: true,
-            isMobile: false, // Auto-detected
+            isMobile: false,
             isPaused: false,
             audioInitialized: false
         };
 
-        // --- AUDIO ENGINE (New) ---
+        // --- DEBUG SYSTEM (New) ---
+        const DEBUG_LOG = [];
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            DEBUG_LOG.push(`[${timestamp}] ${message}`);
+            console.log(message); // Also log to browser console
+        }
+        
+        // --- AUDIO ENGINE ---
         let audioCtx = null;
 
         function initAudio() {
             if (STATE.audioInitialized) return;
-            
             try {
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
                 audioCtx = new AudioContext();
                 STATE.audioInitialized = true;
-                console.log("Audio Context Initialized");
+                log("Audio Context Initialized Successfully");
             } catch (e) {
-                console.error("Web Audio API not supported", e);
+                log("Error: Web Audio API not supported.");
             }
         }
 
         function playShootSound() {
-            if (!audioCtx) return;
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-
-            // Simple synthesized "Pew"
+            if (!audioCtx || audioCtx.state === 'suspended') return;
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
-
             osc.type = 'square';
             osc.frequency.setValueAtTime(400, audioCtx.currentTime);
             osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
-
             gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-
             osc.connect(gain);
             gain.connect(audioCtx.destination);
-
             osc.start();
             osc.stop(audioCtx.currentTime + 0.1);
         }
@@ -175,44 +188,31 @@
         const INPUT = {
             keys: {},
             mouse: { x: 0, y: 0, down: false },
-            moveVector: { x: 0, y: 0 }, 
-            aimAngle: 0,                
+            moveVector: { x: 0, y: 0 },
+            aimAngle: 0,
             isFiring: false,
-            
-            // Touch Data
             touches: {
-                leftId: null,
-                leftStart: { x: 0, y: 0 },
-                leftCurr: { x: 0, y: 0 },
-                rightId: null,
-                rightStart: { x: 0, y: 0 },
-                rightCurr: { x: 0, y: 0 }
+                leftId: null, leftStart: { x: 0, y: 0 }, leftCurr: { x: 0, y: 0 },
+                rightId: null, rightStart: { x: 0, y: 0 }, rightCurr: { x: 0, y: 0 }
             }
         };
 
         // --- GAME OBJECTS ---
-        const PLAYER = {
-            x: 0,
-            y: 0,
-            radius: 20,
-            color: '#00ff00',
-            barrelColor: '#000000',
-            cooldown: 0,
-            flash: 0
-        };
+        const PLAYER = { x: 0, y: 0, radius: 20, color: '#00ff00', barrelColor: '#000000', cooldown: 0, flash: 0 };
+        let BULLETS = [];
 
-        // Array to hold active bullets
-        // v2: Simple array management. v3+: Object Pooling
-        let BULLETS = []; 
-
-        // --- DOM ELEMENTS ---
+        // --- DOM & CANVAS ---
         const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d', { alpha: false }); 
+        const ctx = canvas.getContext('2d', { alpha: false });
+        let gridCanvas = null; // Offscreen canvas for grid (New)
+
         const fpsDiv = document.getElementById('fps-counter');
-        const settingsModal = document.getElementById('settings-modal');
+        const pauseModal = document.getElementById('pause-modal');
+        const debugOverlay = document.getElementById('debug-overlay');
         
         // --- INITIALIZATION ---
         function init() {
+            log("Initializing TTR v3");
             resize();
             window.addEventListener('resize', resize);
             
@@ -221,205 +221,144 @@
 
             setupInputs();
             setupUI();
+            
+            // One-time audio unlocker
+            const unlockAudio = () => {
+                initAudio();
+                window.removeEventListener('touchstart', unlockAudio);
+                window.removeEventListener('mousedown', unlockAudio);
+            };
+            window.addEventListener('touchstart', unlockAudio);
+            window.addEventListener('mousedown', unlockAudio);
 
             requestAnimationFrame(gameLoop);
+            log("Initialization Complete. Game loop started.");
         }
 
         function resize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
+            createGridBackground();
+            log(`Canvas resized to ${canvas.width}x${canvas.height}. Grid re-rendered.`);
+        }
+
+        // --- PERFORMANCE OPTIMIZATION (New) ---
+        function createGridBackground() {
+            gridCanvas = document.createElement('canvas');
+            gridCanvas.width = canvas.width;
+            gridCanvas.height = canvas.height;
+            const gridCtx = gridCanvas.getContext('2d');
+
+            gridCtx.fillStyle = CONFIG.bgColor;
+            gridCtx.fillRect(0, 0, gridCanvas.width, gridCanvas.height);
+            gridCtx.strokeStyle = CONFIG.gridColor;
+            gridCtx.lineWidth = 1;
+            gridCtx.beginPath();
+            for (let x = 0; x < gridCanvas.width; x += CONFIG.gridSize) {
+                gridCtx.moveTo(x, 0); gridCtx.lineTo(x, gridCanvas.height);
+            }
+            for (let y = 0; y < gridCanvas.height; y += CONFIG.gridSize) {
+                gridCtx.moveTo(0, y); gridCtx.lineTo(gridCanvas.width, y);
+            }
+            gridCtx.stroke();
         }
 
         // --- INPUT HANDLING ---
         function setupInputs() {
-            // Keyboard
-            window.addEventListener('keydown', e => { 
-                INPUT.keys[e.key.toLowerCase()] = true; 
-                STATE.isMobile = false; 
-                initAudio(); // Try init on key press
-            });
-            window.addEventListener('keyup', e => { 
-                INPUT.keys[e.key.toLowerCase()] = false; 
-            });
-
-            // Mouse
-            window.addEventListener('mousemove', e => {
-                INPUT.mouse.x = e.clientX;
-                INPUT.mouse.y = e.clientY;
-                STATE.isMobile = false;
-            });
-            window.addEventListener('mousedown', () => { 
-                INPUT.mouse.down = true; 
-                STATE.isMobile = false;
-                initAudio(); // Try init on click
-            });
+            window.addEventListener('keydown', e => { INPUT.keys[e.key.toLowerCase()] = true; STATE.isMobile = false; });
+            window.addEventListener('keyup', e => { INPUT.keys[e.key.toLowerCase()] = false; });
+            window.addEventListener('mousemove', e => { INPUT.mouse.x = e.clientX; INPUT.mouse.y = e.clientY; STATE.isMobile = false; });
+            window.addEventListener('mousedown', () => { INPUT.mouse.down = true; STATE.isMobile = false; });
             window.addEventListener('mouseup', () => { INPUT.mouse.down = false; });
-
-            // Touch
-            canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-            canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-            canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+            canvas.addEventListener('touchstart', handleTouch, { passive: false });
+            canvas.addEventListener('touchmove', handleTouch, { passive: false });
+            canvas.addEventListener('touchend', handleTouch, { passive: false });
         }
 
-        function handleTouchStart(e) {
+        function handleTouch(e) {
             e.preventDefault();
             STATE.isMobile = true;
-            initAudio(); // Try init on touch
+            
+            // Reset joysticks
+            INPUT.touches.leftId = null;
+            INPUT.touches.rightId = null;
 
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                let t = e.changedTouches[i];
-                let halfWidth = canvas.width / 2;
-
-                if (t.clientX < halfWidth && INPUT.touches.leftId === null) {
-                    INPUT.touches.leftId = t.identifier;
-                    INPUT.touches.leftStart.x = t.clientX;
-                    INPUT.touches.leftStart.y = t.clientY;
-                    INPUT.touches.leftCurr.x = t.clientX;
-                    INPUT.touches.leftCurr.y = t.clientY;
-                } else if (t.clientX >= halfWidth && INPUT.touches.rightId === null) {
-                    INPUT.touches.rightId = t.identifier;
-                    INPUT.touches.rightStart.x = t.clientX;
-                    INPUT.touches.rightStart.y = t.clientY;
-                    INPUT.touches.rightCurr.x = t.clientX;
-                    INPUT.touches.rightCurr.y = t.clientY;
+            // Find current touches
+            for (let touch of e.touches) {
+                if (touch.clientX < canvas.width / 2 && INPUT.touches.leftId === null) {
+                    INPUT.touches.leftId = touch.identifier;
+                    INPUT.touches.leftCurr = { x: touch.clientX, y: touch.clientY };
+                    if (e.type === 'touchstart') INPUT.touches.leftStart = { x: touch.clientX, y: touch.clientY };
+                } else if (INPUT.touches.rightId === null) {
+                    INPUT.touches.rightId = touch.identifier;
+                    INPUT.touches.rightCurr = { x: touch.clientX, y: touch.clientY };
+                    if (e.type === 'touchstart') INPUT.touches.rightStart = { x: touch.clientX, y: touch.clientY };
                 }
             }
-        }
-
-        function handleTouchMove(e) {
-            e.preventDefault();
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                let t = e.changedTouches[i];
-                if (t.identifier === INPUT.touches.leftId) {
-                    INPUT.touches.leftCurr.x = t.clientX;
-                    INPUT.touches.leftCurr.y = t.clientY;
-                }
-                if (t.identifier === INPUT.touches.rightId) {
-                    INPUT.touches.rightCurr.x = t.clientX;
-                    INPUT.touches.rightCurr.y = t.clientY;
-                }
-            }
-        }
-
-        function handleTouchEnd(e) {
-            e.preventDefault();
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                let t = e.changedTouches[i];
-                if (t.identifier === INPUT.touches.leftId) {
-                    INPUT.touches.leftId = null;
-                    INPUT.moveVector.x = 0;
-                    INPUT.moveVector.y = 0;
-                }
-                if (t.identifier === INPUT.touches.rightId) {
-                    INPUT.touches.rightId = null;
-                }
-            }
+            if (INPUT.touches.leftId === null) { INPUT.moveVector.x = 0; INPUT.moveVector.y = 0; }
         }
 
         // --- LOGIC UPDATE ---
         function update(dt) {
             if (STATE.isPaused) return;
-
-            // 1. Process Input into Vectors
             if (STATE.isMobile) {
-                // Left Stick (Move)
                 if (INPUT.touches.leftId !== null) {
                     let dx = INPUT.touches.leftCurr.x - INPUT.touches.leftStart.x;
                     let dy = INPUT.touches.leftCurr.y - INPUT.touches.leftStart.y;
-                    let dist = Math.sqrt(dx*dx + dy*dy);
-                    let maxDist = 50; 
-                    
+                    let dist = Math.sqrt(dx * dx + dy * dy);
                     if (dist > 0) {
-                        let power = Math.min(dist, maxDist) / maxDist;
-                        INPUT.moveVector.x = (dx / dist) * power;
-                        INPUT.moveVector.y = (dy / dist) * power;
+                        let power = Math.min(dist, 50) / 50;
+                        INPUT.moveVector = { x: (dx / dist) * power, y: (dy / dist) * power };
                     }
                 }
-
-                // Right Stick (Aim)
                 if (INPUT.touches.rightId !== null) {
                     let dx = INPUT.touches.rightCurr.x - INPUT.touches.rightStart.x;
                     let dy = INPUT.touches.rightCurr.y - INPUT.touches.rightStart.y;
-                    INPUT.aimAngle = Math.atan2(dy, dx);
-                    
-                    if (STATE.mobileAutoFire) {
-                        let dist = Math.sqrt(dx*dx + dy*dy);
-                        INPUT.isFiring = dist > 10; 
-                    } else {
-                        INPUT.isFiring = false; 
-                    }
-                } else {
-                    INPUT.isFiring = false;
+                    if (dx !== 0 || dy !== 0) INPUT.aimAngle = Math.atan2(dy, dx);
                 }
-
+                // Refined Firing Logic
+                INPUT.isFiring = STATE.mobileAutoFire && INPUT.touches.rightId !== null;
             } else {
-                // Desktop Logic
-                INPUT.moveVector.x = 0;
-                INPUT.moveVector.y = 0;
+                INPUT.moveVector = { x: 0, y: 0 };
                 if (INPUT.keys['w'] || INPUT.keys['arrowup']) INPUT.moveVector.y = -1;
                 if (INPUT.keys['s'] || INPUT.keys['arrowdown']) INPUT.moveVector.y = 1;
                 if (INPUT.keys['a'] || INPUT.keys['arrowleft']) INPUT.moveVector.x = -1;
                 if (INPUT.keys['d'] || INPUT.keys['arrowright']) INPUT.moveVector.x = 1;
-                
                 if (INPUT.moveVector.x !== 0 || INPUT.moveVector.y !== 0) {
-                    let len = Math.sqrt(INPUT.moveVector.x**2 + INPUT.moveVector.y**2);
+                    let len = Math.sqrt(INPUT.moveVector.x ** 2 + INPUT.moveVector.y ** 2);
                     INPUT.moveVector.x /= len;
                     INPUT.moveVector.y /= len;
                 }
-
-                let dx = INPUT.mouse.x - PLAYER.x;
-                let dy = INPUT.mouse.y - PLAYER.y;
-                INPUT.aimAngle = Math.atan2(dy, dx);
+                INPUT.aimAngle = Math.atan2(INPUT.mouse.y - PLAYER.y, INPUT.mouse.x - PLAYER.x);
                 INPUT.isFiring = INPUT.mouse.down;
             }
 
-            // 2. Move Player
             PLAYER.x += INPUT.moveVector.x * CONFIG.playerSpeed * dt;
             PLAYER.y += INPUT.moveVector.y * CONFIG.playerSpeed * dt;
-
-            // 3. Boundary Checks
-            if (PLAYER.x < PLAYER.radius) PLAYER.x = PLAYER.radius;
-            if (PLAYER.x > canvas.width - PLAYER.radius) PLAYER.x = canvas.width - PLAYER.radius;
-            if (PLAYER.y < PLAYER.radius) PLAYER.y = PLAYER.radius;
-            if (PLAYER.y > canvas.height - PLAYER.radius) PLAYER.y = canvas.height - PLAYER.radius;
-
-            // 4. Weapon Logic (Firing)
-            if (PLAYER.cooldown > 0) {
-                PLAYER.cooldown -= dt;
-            }
-
+            PLAYER.x = Math.max(PLAYER.radius, Math.min(canvas.width - PLAYER.radius, PLAYER.x));
+            PLAYER.y = Math.max(PLAYER.radius, Math.min(canvas.height - PLAYER.radius, PLAYER.y));
+            if (PLAYER.cooldown > 0) PLAYER.cooldown -= dt;
             if (INPUT.isFiring && PLAYER.cooldown <= 0) {
                 fireWeapon();
                 PLAYER.cooldown = CONFIG.fireRate;
             }
-
-            // 5. Update Bullets
             for (let i = BULLETS.length - 1; i >= 0; i--) {
                 let b = BULLETS[i];
                 b.x += b.vx * dt;
                 b.y += b.vy * dt;
                 b.life -= dt;
-
-                // Remove dead bullets
-                if (b.life <= 0) {
-                    BULLETS.splice(i, 1);
-                }
+                if (b.life <= 0) BULLETS.splice(i, 1);
             }
         }
 
         function fireWeapon() {
             playShootSound();
-            PLAYER.flash = 0.1; 
-
-            // Calculate muzzle position (tip of barrel)
+            PLAYER.flash = 0.1;
             let barrelLen = PLAYER.radius + 10;
             let mx = PLAYER.x + Math.cos(INPUT.aimAngle) * barrelLen;
             let my = PLAYER.y + Math.sin(INPUT.aimAngle) * barrelLen;
-
-            // Create Bullet
             BULLETS.push({
-                x: mx,
-                y: my,
+                x: mx, y: my,
                 vx: Math.cos(INPUT.aimAngle) * CONFIG.bulletSpeed,
                 vy: Math.sin(INPUT.aimAngle) * CONFIG.bulletSpeed,
                 life: CONFIG.bulletLife
@@ -428,75 +367,40 @@
 
         // --- RENDER ---
         function draw() {
-            // Clear Screen
-            ctx.fillStyle = CONFIG.bgColor;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // THE PERFORMANCE FIX: Draw pre-rendered grid
+            ctx.drawImage(gridCanvas, 0, 0);
 
-            // Draw Grid
-            ctx.strokeStyle = CONFIG.gridColor;
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            for (let x = 0; x < canvas.width; x += CONFIG.gridSize) {
-                ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height);
-            }
-            for (let y = 0; y < canvas.height; y += CONFIG.gridSize) {
-                ctx.moveTo(0, y); ctx.lineTo(canvas.width, y);
-            }
-            ctx.stroke();
-
-            // Draw Bullets (Tracers)
             ctx.strokeStyle = '#ffff00';
             ctx.lineWidth = 3;
             ctx.beginPath();
             for (let b of BULLETS) {
-                // Draw a short tail behind the bullet for visual speed
-                let tailLen = 15;
-                let angle = Math.atan2(b.vy, b.vx);
-                let tailX = b.x - Math.cos(angle) * tailLen;
-                let tailY = b.y - Math.sin(angle) * tailLen;
-                
+                let tailX = b.x - (b.vx / CONFIG.bulletSpeed) * 15;
+                let tailY = b.y - (b.vy / CONFIG.bulletSpeed) * 15;
                 ctx.moveTo(tailX, tailY);
                 ctx.lineTo(b.x, b.y);
             }
             ctx.stroke();
 
-            // Draw Player
             ctx.save();
             ctx.translate(PLAYER.x, PLAYER.y);
             ctx.rotate(INPUT.aimAngle);
-
-            // Flash effect
-            ctx.fillStyle = PLAYER.color;
-            if (PLAYER.flash > 0) {
-                ctx.fillStyle = '#ffff00'; 
-                PLAYER.flash -= 0.016; 
-            }
+            ctx.fillStyle = PLAYER.flash > 0 ? '#ffff00' : PLAYER.color;
+            if (PLAYER.flash > 0) PLAYER.flash -= 0.016;
             ctx.fillRect(-PLAYER.radius, -PLAYER.radius, PLAYER.radius * 2, PLAYER.radius * 2);
-
-            // Barrel
             ctx.fillStyle = PLAYER.barrelColor;
             ctx.fillRect(0, -5, PLAYER.radius * 2, 10);
-
             ctx.restore();
 
-            // Draw Mobile Joysticks (Strictly only when active)
-            if (INPUT.touches.leftId !== null) {
-                drawJoystick(INPUT.touches.leftStart, INPUT.touches.leftCurr);
-            }
-            if (INPUT.touches.rightId !== null) {
-                drawJoystick(INPUT.touches.rightStart, INPUT.touches.rightCurr);
-            }
+            if (INPUT.touches.leftId !== null) drawJoystick(INPUT.touches.leftStart, INPUT.touches.leftCurr);
+            if (INPUT.touches.rightId !== null) drawJoystick(INPUT.touches.rightStart, INPUT.touches.rightCurr);
         }
 
         function drawJoystick(start, curr) {
-            // Base
             ctx.beginPath();
             ctx.arc(start.x, start.y, 50, 0, Math.PI * 2);
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
             ctx.lineWidth = 2;
             ctx.stroke();
-
-            // Stick
             ctx.beginPath();
             ctx.arc(curr.x, curr.y, 20, 0, Math.PI * 2);
             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
@@ -505,20 +409,23 @@
 
         // --- UI & SETTINGS ---
         function setupUI() {
-            const btnSettings = document.getElementById('settings-btn');
-            const btnClose = document.getElementById('btn-close-settings');
+            const btnPause = document.getElementById('pause-btn');
+            const btnClose = document.getElementById('btn-close-pause');
             const btnToggleFPS = document.getElementById('btn-toggle-fps');
             const btnAutoFire = document.getElementById('btn-auto-fire');
+            const btnShowDebug = document.getElementById('btn-show-debug');
 
-            btnSettings.onclick = () => {
+            btnPause.onclick = () => {
                 STATE.isPaused = true;
-                settingsModal.style.display = 'block';
+                pauseModal.style.display = 'block';
+                debugOverlay.style.display = 'none'; // Hide debug on pause
             };
 
             btnClose.onclick = () => {
                 STATE.isPaused = false;
-                settingsModal.style.display = 'none';
-                STATE.lastTime = performance.now(); 
+                pauseModal.style.display = 'none';
+                debugOverlay.style.display = 'none';
+                STATE.lastTime = performance.now();
             };
 
             btnToggleFPS.onclick = () => {
@@ -533,6 +440,13 @@
                 btnAutoFire.innerText = `Mobile Auto-Fire: ${STATE.mobileAutoFire ? 'ON' : 'OFF'}`;
                 btnAutoFire.classList.toggle('active', STATE.mobileAutoFire);
             };
+
+            btnShowDebug.onclick = () => {
+                pauseModal.style.display = 'none';
+                debugOverlay.style.display = 'block';
+                debugOverlay.innerHTML = DEBUG_LOG.map(msg => `<div>${msg}</div>`).join('');
+                debugOverlay.scrollTop = debugOverlay.scrollHeight; // Auto-scroll to bottom
+            };
         }
 
         // --- GAME LOOP ---
@@ -544,7 +458,7 @@
             update(dt);
             draw();
 
-            if (STATE.showFPS && Math.random() < 0.05) {
+            if (STATE.showFPS) {
                 fpsDiv.innerText = `FPS: ${Math.round(1 / dt)}`;
             }
 
