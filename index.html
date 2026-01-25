@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TTR v1</title>
+    <title>TTR v2</title>
     <style>
         /* CORE STYLES - WINDOWS 98 EFFICIENCY MENTALITY */
         body {
@@ -108,14 +108,16 @@
 
     <script>
         /** 
-         * TTR ENGINE v1 - "Golden Frame"
-         * Focus: Performance, Garbage Collection Safety, Delta Time
+         * TTR ENGINE v2
+         * Changes: Bullet Physics, Audio Engine, Input Visual Fixes
          */
 
         // --- CONSTANTS & CONFIG ---
         const CONFIG = {
             playerSpeed: 250,      // Pixels per second
-            fireRate: 0.2,         // Seconds between shots (5 shots/sec for testing)
+            fireRate: 0.2,         // Seconds between shots
+            bulletSpeed: 600,      // Pixels per second
+            bulletLife: 1.0,       // Seconds before bullet dies
             bgColor: '#333333',
             gridColor: '#444444',
             gridSize: 50
@@ -127,15 +129,54 @@
             showFPS: true,
             mobileAutoFire: true,
             isMobile: false, // Auto-detected
-            isPaused: false
+            isPaused: false,
+            audioInitialized: false
         };
 
-        // --- INPUT STATE (Pre-allocated to prevent GC) ---
+        // --- AUDIO ENGINE (New) ---
+        let audioCtx = null;
+
+        function initAudio() {
+            if (STATE.audioInitialized) return;
+            
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+                STATE.audioInitialized = true;
+                console.log("Audio Context Initialized");
+            } catch (e) {
+                console.error("Web Audio API not supported", e);
+            }
+        }
+
+        function playShootSound() {
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            // Simple synthesized "Pew"
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
+
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        // --- INPUT STATE ---
         const INPUT = {
             keys: {},
             mouse: { x: 0, y: 0, down: false },
-            moveVector: { x: 0, y: 0 }, // Resultant movement -1 to 1
-            aimAngle: 0,                // Radians
+            moveVector: { x: 0, y: 0 }, 
+            aimAngle: 0,                
             isFiring: false,
             
             // Touch Data
@@ -156,12 +197,17 @@
             radius: 20,
             color: '#00ff00',
             barrelColor: '#000000',
-            cooldown: 0
+            cooldown: 0,
+            flash: 0
         };
+
+        // Array to hold active bullets
+        // v2: Simple array management. v3+: Object Pooling
+        let BULLETS = []; 
 
         // --- DOM ELEMENTS ---
         const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d', { alpha: false }); // Optimize: No transparency on canvas
+        const ctx = canvas.getContext('2d', { alpha: false }); 
         const fpsDiv = document.getElementById('fps-counter');
         const settingsModal = document.getElementById('settings-modal');
         
@@ -170,21 +216,18 @@
             resize();
             window.addEventListener('resize', resize);
             
-            // Center Player
             PLAYER.x = canvas.width / 2;
             PLAYER.y = canvas.height / 2;
 
             setupInputs();
             setupUI();
 
-            // Start Loop
             requestAnimationFrame(gameLoop);
         }
 
         function resize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            // Re-center player if off screen (optional, skipping for now to keep logic simple)
         }
 
         // --- INPUT HANDLING ---
@@ -193,6 +236,7 @@
             window.addEventListener('keydown', e => { 
                 INPUT.keys[e.key.toLowerCase()] = true; 
                 STATE.isMobile = false; 
+                initAudio(); // Try init on key press
             });
             window.addEventListener('keyup', e => { 
                 INPUT.keys[e.key.toLowerCase()] = false; 
@@ -204,32 +248,35 @@
                 INPUT.mouse.y = e.clientY;
                 STATE.isMobile = false;
             });
-            window.addEventListener('mousedown', () => { INPUT.mouse.down = true; STATE.isMobile = false; });
+            window.addEventListener('mousedown', () => { 
+                INPUT.mouse.down = true; 
+                STATE.isMobile = false;
+                initAudio(); // Try init on click
+            });
             window.addEventListener('mouseup', () => { INPUT.mouse.down = false; });
 
-            // Touch (Passive: false to allow preventDefault)
+            // Touch
             canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
             canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
             canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
         }
 
-        // Mobile Logic: Left half screen = Move, Right half = Aim
         function handleTouchStart(e) {
             e.preventDefault();
             STATE.isMobile = true;
+            initAudio(); // Try init on touch
+
             for (let i = 0; i < e.changedTouches.length; i++) {
                 let t = e.changedTouches[i];
                 let halfWidth = canvas.width / 2;
 
                 if (t.clientX < halfWidth && INPUT.touches.leftId === null) {
-                    // Left Stick Start
                     INPUT.touches.leftId = t.identifier;
                     INPUT.touches.leftStart.x = t.clientX;
                     INPUT.touches.leftStart.y = t.clientY;
                     INPUT.touches.leftCurr.x = t.clientX;
                     INPUT.touches.leftCurr.y = t.clientY;
                 } else if (t.clientX >= halfWidth && INPUT.touches.rightId === null) {
-                    // Right Stick Start
                     INPUT.touches.rightId = t.identifier;
                     INPUT.touches.rightStart.x = t.clientX;
                     INPUT.touches.rightStart.y = t.clientY;
@@ -275,14 +322,13 @@
 
             // 1. Process Input into Vectors
             if (STATE.isMobile) {
-                // Joystick Logic
+                // Left Stick (Move)
                 if (INPUT.touches.leftId !== null) {
                     let dx = INPUT.touches.leftCurr.x - INPUT.touches.leftStart.x;
                     let dy = INPUT.touches.leftCurr.y - INPUT.touches.leftStart.y;
                     let dist = Math.sqrt(dx*dx + dy*dy);
-                    let maxDist = 50; // Joystick radius
+                    let maxDist = 50; 
                     
-                    // Normalize
                     if (dist > 0) {
                         let power = Math.min(dist, maxDist) / maxDist;
                         INPUT.moveVector.x = (dx / dist) * power;
@@ -290,17 +336,17 @@
                     }
                 }
 
+                // Right Stick (Aim)
                 if (INPUT.touches.rightId !== null) {
                     let dx = INPUT.touches.rightCurr.x - INPUT.touches.rightStart.x;
                     let dy = INPUT.touches.rightCurr.y - INPUT.touches.rightStart.y;
                     INPUT.aimAngle = Math.atan2(dy, dx);
                     
-                    // Auto Fire Logic
                     if (STATE.mobileAutoFire) {
                         let dist = Math.sqrt(dx*dx + dy*dy);
-                        INPUT.isFiring = dist > 10; // Deadzone
+                        INPUT.isFiring = dist > 10; 
                     } else {
-                        INPUT.isFiring = false; // Need a button if auto-fire is off (future)
+                        INPUT.isFiring = false; 
                     }
                 } else {
                     INPUT.isFiring = false;
@@ -315,7 +361,6 @@
                 if (INPUT.keys['a'] || INPUT.keys['arrowleft']) INPUT.moveVector.x = -1;
                 if (INPUT.keys['d'] || INPUT.keys['arrowright']) INPUT.moveVector.x = 1;
                 
-                // Normalize diagonal
                 if (INPUT.moveVector.x !== 0 || INPUT.moveVector.y !== 0) {
                     let len = Math.sqrt(INPUT.moveVector.x**2 + INPUT.moveVector.y**2);
                     INPUT.moveVector.x /= len;
@@ -338,7 +383,7 @@
             if (PLAYER.y < PLAYER.radius) PLAYER.y = PLAYER.radius;
             if (PLAYER.y > canvas.height - PLAYER.radius) PLAYER.y = canvas.height - PLAYER.radius;
 
-            // 4. Weapon Logic
+            // 4. Weapon Logic (Firing)
             if (PLAYER.cooldown > 0) {
                 PLAYER.cooldown -= dt;
             }
@@ -347,13 +392,38 @@
                 fireWeapon();
                 PLAYER.cooldown = CONFIG.fireRate;
             }
+
+            // 5. Update Bullets
+            for (let i = BULLETS.length - 1; i >= 0; i--) {
+                let b = BULLETS[i];
+                b.x += b.vx * dt;
+                b.y += b.vy * dt;
+                b.life -= dt;
+
+                // Remove dead bullets
+                if (b.life <= 0) {
+                    BULLETS.splice(i, 1);
+                }
+            }
         }
 
         function fireWeapon() {
-            // Visual feedback only for v1
-            console.log("BANG! Angle:", INPUT.aimAngle.toFixed(2));
-            // We will add a "flash" effect in draw()
-            PLAYER.flash = 0.1; // Flash duration
+            playShootSound();
+            PLAYER.flash = 0.1; 
+
+            // Calculate muzzle position (tip of barrel)
+            let barrelLen = PLAYER.radius + 10;
+            let mx = PLAYER.x + Math.cos(INPUT.aimAngle) * barrelLen;
+            let my = PLAYER.y + Math.sin(INPUT.aimAngle) * barrelLen;
+
+            // Create Bullet
+            BULLETS.push({
+                x: mx,
+                y: my,
+                vx: Math.cos(INPUT.aimAngle) * CONFIG.bulletSpeed,
+                vy: Math.sin(INPUT.aimAngle) * CONFIG.bulletSpeed,
+                life: CONFIG.bulletLife
+            });
         }
 
         // --- RENDER ---
@@ -362,7 +432,7 @@
             ctx.fillStyle = CONFIG.bgColor;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Draw Grid (World Reference)
+            // Draw Grid
             ctx.strokeStyle = CONFIG.gridColor;
             ctx.lineWidth = 1;
             ctx.beginPath();
@@ -374,35 +444,51 @@
             }
             ctx.stroke();
 
+            // Draw Bullets (Tracers)
+            ctx.strokeStyle = '#ffff00';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            for (let b of BULLETS) {
+                // Draw a short tail behind the bullet for visual speed
+                let tailLen = 15;
+                let angle = Math.atan2(b.vy, b.vx);
+                let tailX = b.x - Math.cos(angle) * tailLen;
+                let tailY = b.y - Math.sin(angle) * tailLen;
+                
+                ctx.moveTo(tailX, tailY);
+                ctx.lineTo(b.x, b.y);
+            }
+            ctx.stroke();
+
             // Draw Player
             ctx.save();
             ctx.translate(PLAYER.x, PLAYER.y);
             ctx.rotate(INPUT.aimAngle);
 
-            // Tank Body
+            // Flash effect
             ctx.fillStyle = PLAYER.color;
             if (PLAYER.flash > 0) {
-                ctx.fillStyle = '#ffff00'; // Flash yellow when shooting
-                PLAYER.flash -= 0.016; // Rough decrement
+                ctx.fillStyle = '#ffff00'; 
+                PLAYER.flash -= 0.016; 
             }
             ctx.fillRect(-PLAYER.radius, -PLAYER.radius, PLAYER.radius * 2, PLAYER.radius * 2);
 
-            // Tank Barrel
+            // Barrel
             ctx.fillStyle = PLAYER.barrelColor;
             ctx.fillRect(0, -5, PLAYER.radius * 2, 10);
 
             ctx.restore();
 
-            // Draw Mobile Joysticks (Visual Feedback)
-            if (STATE.isMobile) {
+            // Draw Mobile Joysticks (Strictly only when active)
+            if (INPUT.touches.leftId !== null) {
                 drawJoystick(INPUT.touches.leftStart, INPUT.touches.leftCurr);
+            }
+            if (INPUT.touches.rightId !== null) {
                 drawJoystick(INPUT.touches.rightStart, INPUT.touches.rightCurr);
             }
         }
 
         function drawJoystick(start, curr) {
-            if (start.x === 0 && start.y === 0) return;
-            
             // Base
             ctx.beginPath();
             ctx.arc(start.x, start.y, 50, 0, Math.PI * 2);
@@ -432,7 +518,7 @@
             btnClose.onclick = () => {
                 STATE.isPaused = false;
                 settingsModal.style.display = 'none';
-                STATE.lastTime = performance.now(); // Reset time to prevent huge dt jump
+                STATE.lastTime = performance.now(); 
             };
 
             btnToggleFPS.onclick = () => {
@@ -458,7 +544,6 @@
             update(dt);
             draw();
 
-            // Update FPS (Roughly)
             if (STATE.showFPS && Math.random() < 0.05) {
                 fpsDiv.innerText = `FPS: ${Math.round(1 / dt)}`;
             }
