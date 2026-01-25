@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TTR v4</title>
+    <title>TTR v5</title>
     <style>
         /* CORE STYLES */
         body {
@@ -12,7 +12,8 @@
             background-color: #000;
             overflow: hidden;
             touch-action: none;
-            font-family: 'Courier New', Courier, monospace;
+            /* UI POLISH: New Font Family */
+            font-family: 'Verdana', 'Trebuchet MS', sans-serif;
             color: white;
             user-select: none;
             -webkit-user-select: none;
@@ -34,26 +35,51 @@
 
         .hud-text {
             position: absolute;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 5px;
+            /* UI POLISH: Text Shadow for better visibility without boxes */
+            text-shadow: 1px 1px 2px black;
+            font-weight: bold;
             pointer-events: auto;
         }
 
-        #version-display { /* New */
+        #version-display {
             top: 10px;
             left: 10px;
+            font-size: 12px;
+            opacity: 0.7;
         }
         
-        #fps-counter { /* Relocated */
-            top: 40px;
+        #fps-counter {
+            top: 50px; /* Below pause button */
             right: 10px;
+            text-align: right;
+            font-size: 14px;
         }
 
         #pause-btn {
             top: 10px;
             right: 10px;
             cursor: pointer;
+            font-size: 24px;
+            line-height: 24px;
+            width: 30px;
+            height: 30px;
+            text-align: center;
+            background: rgba(0,0,0,0.3);
+            border-radius: 4px;
             border: 1px solid #fff;
+        }
+
+        /* PAUSE OVERLAY (Darken screen) */
+        #pause-overlay {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 10;
+            pointer-events: auto; /* Block game input */
         }
 
         /* PAUSE MODAL */
@@ -66,45 +92,58 @@
             background: #333;
             border: 2px solid #fff;
             padding: 20px;
-            pointer-events: auto;
             text-align: center;
             min-width: 250px;
-            box-shadow: 0 0 10px #000;
+            box-shadow: 0 0 15px #000;
+            z-index: 20;
         }
 
         .modal-btn {
             display: block;
             width: 100%;
             margin: 10px 0;
-            padding: 10px;
+            padding: 12px;
             background: #555;
             color: #fff;
             border: 1px solid #aaa;
             cursor: pointer;
+            font-family: inherit;
+            font-size: 14px;
         }
 
         .modal-btn.active {
             background: #00dd00;
             color: #000;
+            font-weight: bold;
         }
         
         /* DEBUG OVERLAY */
         #debug-overlay {
-            display: none;
+            display: none; /* Toggled */
             position: absolute;
             bottom: 0;
             left: 0;
             width: 100%;
             height: 30%;
-            background: rgba(0,0,0,0.7);
-            pointer-events: auto;
+            background: rgba(0,0,0,0.5); /* Semi-transparent for live view */
+            color: #0f0;
+            font-family: 'Courier New', monospace;
             overflow-y: scroll;
-            font-size: 12px;
+            font-size: 11px;
             box-sizing: border-box;
             padding: 5px;
-            /* Usability Upgrade */
+            z-index: 5;
+            /* Interaction Logic handled via JS/Classes */
+            pointer-events: none; /* Default: Click-through during game */
+            user-select: none;
+        }
+
+        /* When paused, debug becomes interactive */
+        #debug-overlay.interactive {
+            pointer-events: auto;
             user-select: text;
             -webkit-user-select: text;
+            background: rgba(0,0,0,0.8);
         }
     </style>
 </head>
@@ -113,17 +152,20 @@
     <canvas id="gameCanvas"></canvas>
 
     <div id="ui-layer">
-        <div id="version-display" class="hud-text">v4</div>
+        <div id="version-display" class="hud-text">v5</div>
         <div id="fps-counter" class="hud-text">FPS: 60</div>
-        <div id="pause-btn" class="hud-text">PAUSE</div>
+        <!-- UI POLISH: Pause Icon -->
+        <div id="pause-btn" class="hud-text">&#10074;&#10074;</div>
+
+        <div id="pause-overlay"></div>
 
         <div id="pause-modal">
             <h3>PAUSED</h3>
             <button id="btn-toggle-fps" class="modal-btn active">Show FPS: ON</button>
             <button id="btn-auto-fire" class="modal-btn active">Mobile Auto-Fire: ON</button>
             <button id="btn-copy-log" class="modal-btn">Copy Log</button>
-            <button id="btn-show-debug" class="modal-btn">Show Debug Log</button>
-            <button id="btn-close-pause" class="modal-btn" style="background: #800;">CLOSE</button>
+            <button id="btn-toggle-debug" class="modal-btn">Show Live Debug: OFF</button>
+            <button id="btn-close-pause" class="modal-btn" style="background: #800;">RESUME</button>
         </div>
         
         <div id="debug-overlay"></div>
@@ -131,30 +173,62 @@
 
     <script>
         /** 
-         * TTR ENGINE v4
-         * Changes: Guaranteed Audio Fix, UI Layout, Debug Usability
+         * TTR ENGINE v5
+         * Changes: Composite Tank Model, Advanced FPS, UI Polish, Live Debug
          */
 
-        const VERSION = "v4";
+        const VERSION = "v5";
 
         // --- CONSTANTS & CONFIG ---
         const CONFIG = {
-            playerSpeed: 250, fireRate: 1.0, bulletSpeed: 600, bulletLife: 1.0,
-            bgColor: '#333333', gridColor: '#444444', gridSize: 50
+            playerSpeed: 250, 
+            fireRate: 1.0, 
+            bulletSpeed: 600, 
+            bulletLife: 1.0,
+            bgColor: '#333333', 
+            gridColor: '#444444', 
+            gridSize: 50,
+            joystickDeadzone: 0.2 // 20% movement required to register aim
         };
 
         // --- STATE MANAGEMENT ---
         const STATE = {
-            lastTime: 0, showFPS: true, mobileAutoFire: true,
-            isMobile: false, isPaused: false, audioInitialized: false
+            lastTime: 0, 
+            showFPS: true, 
+            showDebug: false,
+            mobileAutoFire: true,
+            isMobile: false, 
+            isPaused: false, 
+            audioInitialized: false
+        };
+
+        // --- FPS LOGIC (Advanced) ---
+        const FPS = {
+            current: 60,
+            min: 60,
+            max: 60,
+            buffer: [],
+            lastUpdate: 0
         };
 
         // --- DEBUG SYSTEM ---
         const DEBUG_LOG = [];
         function log(message) {
             const timestamp = new Date().toLocaleTimeString();
-            DEBUG_LOG.push(`[${timestamp}] ${message}`);
+            const entry = `[${timestamp}] ${message}`;
+            DEBUG_LOG.push(entry);
             console.log(message);
+            
+            // Update DOM if visible
+            const debugOverlay = document.getElementById('debug-overlay');
+            if (debugOverlay) {
+                const div = document.createElement('div');
+                div.textContent = entry;
+                debugOverlay.appendChild(div);
+                if (!STATE.isPaused) { // Auto-scroll only if playing (don't annoy user reading logs)
+                    debugOverlay.scrollTop = debugOverlay.scrollHeight;
+                }
+            }
         }
         
         // --- AUDIO ENGINE ---
@@ -174,7 +248,6 @@
 
         function playShootSound() {
             if (!audioCtx) return;
-            // THE AUDIO FIX: Force resume on every shot if needed.
             if (audioCtx.state === 'suspended') {
                 audioCtx.resume();
             }
@@ -203,7 +276,16 @@
         };
 
         // --- GAME OBJECTS ---
-        const PLAYER = { x: 0, y: 0, radius: 20, color: '#00ff00', barrelColor: '#000000', cooldown: 0, flash: 0 };
+        const PLAYER = { 
+            x: 0, y: 0, 
+            radius: 20, 
+            color: '#4CAF50', // Nicer green
+            barrelColor: '#2E7D32', // Darker green
+            treadColor: '#1B5E20', // Very dark green
+            cooldown: 0, 
+            bodyAngle: 0, // Direction of movement
+            turretAngle: 0 // Direction of aim
+        };
         let BULLETS = [];
 
         // --- DOM & CANVAS ---
@@ -214,6 +296,7 @@
         const versionDiv = document.getElementById('version-display');
         const fpsDiv = document.getElementById('fps-counter');
         const pauseModal = document.getElementById('pause-modal');
+        const pauseOverlay = document.getElementById('pause-overlay');
         const debugOverlay = document.getElementById('debug-overlay');
         
         // --- INITIALIZATION ---
@@ -248,7 +331,6 @@
             log(`Canvas resized to ${canvas.width}x${canvas.height}. Grid re-rendered.`);
         }
 
-        // --- PERFORMANCE OPTIMIZATION ---
         function createGridBackground() {
             gridCanvas = document.createElement('canvas');
             gridCanvas.width = canvas.width;
@@ -302,7 +384,10 @@
         // --- LOGIC UPDATE ---
         function update(dt) {
             if (STATE.isPaused) return;
+
+            // Input Processing
             if (STATE.isMobile) {
+                // Movement
                 if (INPUT.touches.leftId !== null) {
                     let dx = INPUT.touches.leftCurr.x - INPUT.touches.leftStart.x;
                     let dy = INPUT.touches.leftCurr.y - INPUT.touches.leftStart.y;
@@ -312,13 +397,22 @@
                         INPUT.moveVector = { x: (dx / dist) * power, y: (dy / dist) * power };
                     }
                 }
+
+                // Aiming (With Deadzone)
                 if (INPUT.touches.rightId !== null) {
                     let dx = INPUT.touches.rightCurr.x - INPUT.touches.rightStart.x;
                     let dy = INPUT.touches.rightCurr.y - INPUT.touches.rightStart.y;
-                    if (dx !== 0 || dy !== 0) INPUT.aimAngle = Math.atan2(dy, dx);
+                    let dist = Math.sqrt(dx * dx + dy * dy);
+                    let maxDist = 50; // Joystick visual radius
+                    
+                    // Deadzone Check: Only rotate if pulled 20%
+                    if ((dist / maxDist) > CONFIG.joystickDeadzone) {
+                        INPUT.aimAngle = Math.atan2(dy, dx);
+                    }
                 }
                 INPUT.isFiring = STATE.mobileAutoFire && INPUT.touches.rightId !== null;
             } else {
+                // Desktop
                 INPUT.moveVector = { x: 0, y: 0 };
                 if (INPUT.keys['w'] || INPUT.keys['arrowup']) INPUT.moveVector.y = -1;
                 if (INPUT.keys['s'] || INPUT.keys['arrowdown']) INPUT.moveVector.y = 1;
@@ -333,15 +427,24 @@
                 INPUT.isFiring = INPUT.mouse.down;
             }
 
+            // Tank Body Rotation (Matches Movement)
+            if (INPUT.moveVector.x !== 0 || INPUT.moveVector.y !== 0) {
+                PLAYER.bodyAngle = Math.atan2(INPUT.moveVector.y, INPUT.moveVector.x);
+            }
+            PLAYER.turretAngle = INPUT.aimAngle;
+
+            // Physics
             PLAYER.x += INPUT.moveVector.x * CONFIG.playerSpeed * dt;
             PLAYER.y += INPUT.moveVector.y * CONFIG.playerSpeed * dt;
             PLAYER.x = Math.max(PLAYER.radius, Math.min(canvas.width - PLAYER.radius, PLAYER.x));
             PLAYER.y = Math.max(PLAYER.radius, Math.min(canvas.height - PLAYER.radius, PLAYER.y));
+            
             if (PLAYER.cooldown > 0) PLAYER.cooldown -= dt;
             if (INPUT.isFiring && PLAYER.cooldown <= 0) {
                 fireWeapon();
                 PLAYER.cooldown = CONFIG.fireRate;
             }
+            
             for (let i = BULLETS.length - 1; i >= 0; i--) {
                 let b = BULLETS[i];
                 b.x += b.vx * dt;
@@ -353,14 +456,13 @@
 
         function fireWeapon() {
             playShootSound();
-            PLAYER.flash = 0.1;
-            let barrelLen = PLAYER.radius + 10;
-            let mx = PLAYER.x + Math.cos(INPUT.aimAngle) * barrelLen;
-            let my = PLAYER.y + Math.sin(INPUT.aimAngle) * barrelLen;
+            let barrelLen = 30; // Length of barrel for spawn point
+            let mx = PLAYER.x + Math.cos(PLAYER.turretAngle) * barrelLen;
+            let my = PLAYER.y + Math.sin(PLAYER.turretAngle) * barrelLen;
             BULLETS.push({
                 x: mx, y: my,
-                vx: Math.cos(INPUT.aimAngle) * CONFIG.bulletSpeed,
-                vy: Math.sin(INPUT.aimAngle) * CONFIG.bulletSpeed,
+                vx: Math.cos(PLAYER.turretAngle) * CONFIG.bulletSpeed,
+                vy: Math.sin(PLAYER.turretAngle) * CONFIG.bulletSpeed,
                 life: CONFIG.bulletLife
             });
         }
@@ -368,6 +470,8 @@
         // --- RENDER ---
         function draw() {
             ctx.drawImage(gridCanvas, 0, 0);
+
+            // Bullets
             ctx.strokeStyle = '#ffff00';
             ctx.lineWidth = 3;
             ctx.beginPath();
@@ -378,17 +482,42 @@
                 ctx.lineTo(b.x, b.y);
             }
             ctx.stroke();
+
+            // Player (Composite Model)
             ctx.save();
             ctx.translate(PLAYER.x, PLAYER.y);
-            ctx.rotate(INPUT.aimAngle);
-            ctx.fillStyle = PLAYER.flash > 0 ? '#ffff00' : PLAYER.color;
-            if (PLAYER.flash > 0) PLAYER.flash -= 0.016;
-            ctx.fillRect(-PLAYER.radius, -PLAYER.radius, PLAYER.radius * 2, PLAYER.radius * 2);
-            ctx.fillStyle = PLAYER.barrelColor;
-            ctx.fillRect(0, -5, PLAYER.radius * 2, 10);
+
+            // 1. Body (Rotates with movement)
+            ctx.save();
+            ctx.rotate(PLAYER.bodyAngle);
+            ctx.fillStyle = PLAYER.color;
+            ctx.fillRect(-18, -18, 36, 36); // Main Chassis
+            ctx.fillStyle = PLAYER.treadColor;
+            ctx.fillRect(-18, -22, 36, 6); // Top Tread
+            ctx.fillRect(-18, 16, 36, 6);  // Bottom Tread
             ctx.restore();
-            if (INPUT.touches.leftId !== null) drawJoystick(INPUT.touches.leftStart, INPUT.touches.leftCurr);
-            if (INPUT.touches.rightId !== null) drawJoystick(INPUT.touches.rightStart, INPUT.touches.rightCurr);
+
+            // 2. Turret (Rotates with aim)
+            ctx.save();
+            ctx.rotate(PLAYER.turretAngle);
+            ctx.fillStyle = PLAYER.barrelColor;
+            ctx.fillRect(0, -6, 32, 12); // Barrel
+            ctx.fillStyle = PLAYER.color;
+            ctx.beginPath();
+            ctx.arc(0, 0, 14, 0, Math.PI * 2); // Turret Dome
+            ctx.fill();
+            ctx.strokeStyle = PLAYER.barrelColor;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.restore();
+
+            // Joysticks (Hide if Paused)
+            if (!STATE.isPaused) {
+                if (INPUT.touches.leftId !== null) drawJoystick(INPUT.touches.leftStart, INPUT.touches.leftCurr);
+                if (INPUT.touches.rightId !== null) drawJoystick(INPUT.touches.rightStart, INPUT.touches.rightCurr);
+            }
         }
 
         function drawJoystick(start, curr) {
@@ -409,20 +538,26 @@
             const btnClose = document.getElementById('btn-close-pause');
             const btnToggleFPS = document.getElementById('btn-toggle-fps');
             const btnAutoFire = document.getElementById('btn-auto-fire');
-            const btnShowDebug = document.getElementById('btn-show-debug');
+            const btnToggleDebug = document.getElementById('btn-toggle-debug');
             const btnCopyLog = document.getElementById('btn-copy-log');
 
-            btnPause.onclick = () => {
-                STATE.isPaused = true;
-                pauseModal.style.display = 'block';
-                debugOverlay.style.display = 'none';
+            const togglePause = (pause) => {
+                STATE.isPaused = pause;
+                pauseModal.style.display = pause ? 'block' : 'none';
+                pauseOverlay.style.display = pause ? 'block' : 'none';
+                
+                // Interactive Debug when paused
+                if (pause) {
+                    debugOverlay.classList.add('interactive');
+                } else {
+                    debugOverlay.classList.remove('interactive');
+                    STATE.lastTime = performance.now();
+                }
             };
-            btnClose.onclick = () => {
-                STATE.isPaused = false;
-                pauseModal.style.display = 'none';
-                debugOverlay.style.display = 'none';
-                STATE.lastTime = performance.now();
-            };
+
+            btnPause.onclick = () => togglePause(true);
+            btnClose.onclick = () => togglePause(false);
+
             btnToggleFPS.onclick = () => {
                 STATE.showFPS = !STATE.showFPS;
                 fpsDiv.style.display = STATE.showFPS ? 'block' : 'none';
@@ -434,11 +569,11 @@
                 btnAutoFire.innerText = `Mobile Auto-Fire: ${STATE.mobileAutoFire ? 'ON' : 'OFF'}`;
                 btnAutoFire.classList.toggle('active', STATE.mobileAutoFire);
             };
-            btnShowDebug.onclick = () => {
-                pauseModal.style.display = 'none';
-                debugOverlay.style.display = 'block';
-                debugOverlay.innerHTML = DEBUG_LOG.map(msg => `<div>${msg}</div>`).join('');
-                debugOverlay.scrollTop = debugOverlay.scrollHeight;
+            btnToggleDebug.onclick = () => {
+                STATE.showDebug = !STATE.showDebug;
+                debugOverlay.style.display = STATE.showDebug ? 'block' : 'none';
+                btnToggleDebug.innerText = `Show Live Debug: ${STATE.showDebug ? 'ON' : 'OFF'}`;
+                btnToggleDebug.classList.toggle('active', STATE.showDebug);
             };
             btnCopyLog.onclick = () => {
                 const logText = DEBUG_LOG.join('\n');
@@ -446,13 +581,12 @@
                     log("Log copied to clipboard!");
                     alert("Debug log copied to clipboard!");
                 }).catch(err => {
-                    log("Error copying log to clipboard.");
-                    alert("Could not copy log. See console for details.");
+                    log("Error copying log.");
                 });
             };
         }
 
-        // --- GAME LOOP ---
+        // --- GAME LOOP & FPS ---
         function gameLoop(timestamp) {
             if (!STATE.lastTime) STATE.lastTime = timestamp;
             const dt = (timestamp - STATE.lastTime) / 1000;
@@ -461,8 +595,20 @@
             update(dt);
             draw();
 
-            if (STATE.showFPS) {
-                fpsDiv.innerText = `FPS: ${Math.round(1 / dt)}`;
+            // Advanced FPS Calculation
+            if (STATE.showFPS && dt > 0) {
+                const currentFPS = Math.round(1 / dt);
+                FPS.buffer.push(currentFPS);
+                
+                if (timestamp - FPS.lastUpdate >= 1000) {
+                    FPS.current = currentFPS;
+                    FPS.min = Math.min(...FPS.buffer);
+                    FPS.max = Math.max(...FPS.buffer);
+                    FPS.buffer = []; // Clear buffer
+                    FPS.lastUpdate = timestamp;
+                    
+                    fpsDiv.innerText = `FPS: ${FPS.current} (${FPS.min}-${FPS.max})`;
+                }
             }
 
             requestAnimationFrame(gameLoop);
