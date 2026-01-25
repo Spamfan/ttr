@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TTR v1</title>
+    <style>
+        /* CORE STYLES - WINDOWS 98 EFFICIENCY MENTALITY */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #222;
+            overflow: hidden; /* Prevent scrollbars */
+            touch-action: none; /* Disable browser zooming/scrolling gestures */
+            font-family: 'Courier New', Courier, monospace;
+            color: white;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* CANVAS */
+        canvas {
+            display: block;
+        }
+
+        /* UI OVERLAY */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Let clicks pass through to canvas */
+        }
+
+        /* HUD ELEMENTS */
+        .hud-text {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px;
+            pointer-events: auto;
+        }
+
+        #fps-counter {
+            top: 10px;
+            left: 10px;
+            display: block; /* Toggled via JS */
+        }
+
+        #settings-btn {
+            top: 10px;
+            right: 10px;
+            cursor: pointer;
+            border: 1px solid #fff;
+        }
+
+        /* SETTINGS MODAL */
+        #settings-modal {
+            display: none; /* Hidden by default */
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #333;
+            border: 2px solid #fff;
+            padding: 20px;
+            pointer-events: auto;
+            text-align: center;
+            min-width: 250px;
+            box-shadow: 0 0 10px #000;
+        }
+
+        .modal-btn {
+            display: block;
+            width: 100%;
+            margin: 10px 0;
+            padding: 10px;
+            background: #555;
+            color: #fff;
+            border: 1px solid #aaa;
+            cursor: pointer;
+        }
+
+        .modal-btn.active {
+            background: #00ff00;
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- THE GAME CANVAS -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- UI LAYER -->
+    <div id="ui-layer">
+        <div id="fps-counter" class="hud-text">FPS: 60</div>
+        <div id="settings-btn" class="hud-text">SETTINGS</div>
+
+        <!-- SETTINGS MODAL -->
+        <div id="settings-modal">
+            <h3>SETTINGS</h3>
+            <button id="btn-toggle-fps" class="modal-btn active">Show FPS: ON</button>
+            <button id="btn-auto-fire" class="modal-btn active">Mobile Auto-Fire: ON</button>
+            <button id="btn-close-settings" class="modal-btn" style="background: #800;">CLOSE</button>
+        </div>
+    </div>
+
+    <script>
+        /** 
+         * TTR ENGINE v1 - "Golden Frame"
+         * Focus: Performance, Garbage Collection Safety, Delta Time
+         */
+
+        // --- CONSTANTS & CONFIG ---
+        const CONFIG = {
+            playerSpeed: 250,      // Pixels per second
+            fireRate: 0.2,         // Seconds between shots (5 shots/sec for testing)
+            bgColor: '#333333',
+            gridColor: '#444444',
+            gridSize: 50
+        };
+
+        // --- STATE MANAGEMENT ---
+        const STATE = {
+            lastTime: 0,
+            showFPS: true,
+            mobileAutoFire: true,
+            isMobile: false, // Auto-detected
+            isPaused: false
+        };
+
+        // --- INPUT STATE (Pre-allocated to prevent GC) ---
+        const INPUT = {
+            keys: {},
+            mouse: { x: 0, y: 0, down: false },
+            moveVector: { x: 0, y: 0 }, // Resultant movement -1 to 1
+            aimAngle: 0,                // Radians
+            isFiring: false,
+            
+            // Touch Data
+            touches: {
+                leftId: null,
+                leftStart: { x: 0, y: 0 },
+                leftCurr: { x: 0, y: 0 },
+                rightId: null,
+                rightStart: { x: 0, y: 0 },
+                rightCurr: { x: 0, y: 0 }
+            }
+        };
+
+        // --- GAME OBJECTS ---
+        const PLAYER = {
+            x: 0,
+            y: 0,
+            radius: 20,
+            color: '#00ff00',
+            barrelColor: '#000000',
+            cooldown: 0
+        };
+
+        // --- DOM ELEMENTS ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d', { alpha: false }); // Optimize: No transparency on canvas
+        const fpsDiv = document.getElementById('fps-counter');
+        const settingsModal = document.getElementById('settings-modal');
+        
+        // --- INITIALIZATION ---
+        function init() {
+            resize();
+            window.addEventListener('resize', resize);
+            
+            // Center Player
+            PLAYER.x = canvas.width / 2;
+            PLAYER.y = canvas.height / 2;
+
+            setupInputs();
+            setupUI();
+
+            // Start Loop
+            requestAnimationFrame(gameLoop);
+        }
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            // Re-center player if off screen (optional, skipping for now to keep logic simple)
+        }
+
+        // --- INPUT HANDLING ---
+        function setupInputs() {
+            // Keyboard
+            window.addEventListener('keydown', e => { 
+                INPUT.keys[e.key.toLowerCase()] = true; 
+                STATE.isMobile = false; 
+            });
+            window.addEventListener('keyup', e => { 
+                INPUT.keys[e.key.toLowerCase()] = false; 
+            });
+
+            // Mouse
+            window.addEventListener('mousemove', e => {
+                INPUT.mouse.x = e.clientX;
+                INPUT.mouse.y = e.clientY;
+                STATE.isMobile = false;
+            });
+            window.addEventListener('mousedown', () => { INPUT.mouse.down = true; STATE.isMobile = false; });
+            window.addEventListener('mouseup', () => { INPUT.mouse.down = false; });
+
+            // Touch (Passive: false to allow preventDefault)
+            canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+            canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+            canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+        }
+
+        // Mobile Logic: Left half screen = Move, Right half = Aim
+        function handleTouchStart(e) {
+            e.preventDefault();
+            STATE.isMobile = true;
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                let t = e.changedTouches[i];
+                let halfWidth = canvas.width / 2;
+
+                if (t.clientX < halfWidth && INPUT.touches.leftId === null) {
+                    // Left Stick Start
+                    INPUT.touches.leftId = t.identifier;
+                    INPUT.touches.leftStart.x = t.clientX;
+                    INPUT.touches.leftStart.y = t.clientY;
+                    INPUT.touches.leftCurr.x = t.clientX;
+                    INPUT.touches.leftCurr.y = t.clientY;
+                } else if (t.clientX >= halfWidth && INPUT.touches.rightId === null) {
+                    // Right Stick Start
+                    INPUT.touches.rightId = t.identifier;
+                    INPUT.touches.rightStart.x = t.clientX;
+                    INPUT.touches.rightStart.y = t.clientY;
+                    INPUT.touches.rightCurr.x = t.clientX;
+                    INPUT.touches.rightCurr.y = t.clientY;
+                }
+            }
+        }
+
+        function handleTouchMove(e) {
+            e.preventDefault();
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                let t = e.changedTouches[i];
+                if (t.identifier === INPUT.touches.leftId) {
+                    INPUT.touches.leftCurr.x = t.clientX;
+                    INPUT.touches.leftCurr.y = t.clientY;
+                }
+                if (t.identifier === INPUT.touches.rightId) {
+                    INPUT.touches.rightCurr.x = t.clientX;
+                    INPUT.touches.rightCurr.y = t.clientY;
+                }
+            }
+        }
+
+        function handleTouchEnd(e) {
+            e.preventDefault();
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                let t = e.changedTouches[i];
+                if (t.identifier === INPUT.touches.leftId) {
+                    INPUT.touches.leftId = null;
+                    INPUT.moveVector.x = 0;
+                    INPUT.moveVector.y = 0;
+                }
+                if (t.identifier === INPUT.touches.rightId) {
+                    INPUT.touches.rightId = null;
+                }
+            }
+        }
+
+        // --- LOGIC UPDATE ---
+        function update(dt) {
+            if (STATE.isPaused) return;
+
+            // 1. Process Input into Vectors
+            if (STATE.isMobile) {
+                // Joystick Logic
+                if (INPUT.touches.leftId !== null) {
+                    let dx = INPUT.touches.leftCurr.x - INPUT.touches.leftStart.x;
+                    let dy = INPUT.touches.leftCurr.y - INPUT.touches.leftStart.y;
+                    let dist = Math.sqrt(dx*dx + dy*dy);
+                    let maxDist = 50; // Joystick radius
+                    
+                    // Normalize
+                    if (dist > 0) {
+                        let power = Math.min(dist, maxDist) / maxDist;
+                        INPUT.moveVector.x = (dx / dist) * power;
+                        INPUT.moveVector.y = (dy / dist) * power;
+                    }
+                }
+
+                if (INPUT.touches.rightId !== null) {
+                    let dx = INPUT.touches.rightCurr.x - INPUT.touches.rightStart.x;
+                    let dy = INPUT.touches.rightCurr.y - INPUT.touches.rightStart.y;
+                    INPUT.aimAngle = Math.atan2(dy, dx);
+                    
+                    // Auto Fire Logic
+                    if (STATE.mobileAutoFire) {
+                        let dist = Math.sqrt(dx*dx + dy*dy);
+                        INPUT.isFiring = dist > 10; // Deadzone
+                    } else {
+                        INPUT.isFiring = false; // Need a button if auto-fire is off (future)
+                    }
+                } else {
+                    INPUT.isFiring = false;
+                }
+
+            } else {
+                // Desktop Logic
+                INPUT.moveVector.x = 0;
+                INPUT.moveVector.y = 0;
+                if (INPUT.keys['w'] || INPUT.keys['arrowup']) INPUT.moveVector.y = -1;
+                if (INPUT.keys['s'] || INPUT.keys['arrowdown']) INPUT.moveVector.y = 1;
+                if (INPUT.keys['a'] || INPUT.keys['arrowleft']) INPUT.moveVector.x = -1;
+                if (INPUT.keys['d'] || INPUT.keys['arrowright']) INPUT.moveVector.x = 1;
+                
+                // Normalize diagonal
+                if (INPUT.moveVector.x !== 0 || INPUT.moveVector.y !== 0) {
+                    let len = Math.sqrt(INPUT.moveVector.x**2 + INPUT.moveVector.y**2);
+                    INPUT.moveVector.x /= len;
+                    INPUT.moveVector.y /= len;
+                }
+
+                let dx = INPUT.mouse.x - PLAYER.x;
+                let dy = INPUT.mouse.y - PLAYER.y;
+                INPUT.aimAngle = Math.atan2(dy, dx);
+                INPUT.isFiring = INPUT.mouse.down;
+            }
+
+            // 2. Move Player
+            PLAYER.x += INPUT.moveVector.x * CONFIG.playerSpeed * dt;
+            PLAYER.y += INPUT.moveVector.y * CONFIG.playerSpeed * dt;
+
+            // 3. Boundary Checks
+            if (PLAYER.x < PLAYER.radius) PLAYER.x = PLAYER.radius;
+            if (PLAYER.x > canvas.width - PLAYER.radius) PLAYER.x = canvas.width - PLAYER.radius;
+            if (PLAYER.y < PLAYER.radius) PLAYER.y = PLAYER.radius;
+            if (PLAYER.y > canvas.height - PLAYER.radius) PLAYER.y = canvas.height - PLAYER.radius;
+
+            // 4. Weapon Logic
+            if (PLAYER.cooldown > 0) {
+                PLAYER.cooldown -= dt;
+            }
+
+            if (INPUT.isFiring && PLAYER.cooldown <= 0) {
+                fireWeapon();
+                PLAYER.cooldown = CONFIG.fireRate;
+            }
+        }
+
+        function fireWeapon() {
+            // Visual feedback only for v1
+            console.log("BANG! Angle:", INPUT.aimAngle.toFixed(2));
+            // We will add a "flash" effect in draw()
+            PLAYER.flash = 0.1; // Flash duration
+        }
+
+        // --- RENDER ---
+        function draw() {
+            // Clear Screen
+            ctx.fillStyle = CONFIG.bgColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Grid (World Reference)
+            ctx.strokeStyle = CONFIG.gridColor;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let x = 0; x < canvas.width; x += CONFIG.gridSize) {
+                ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height);
+            }
+            for (let y = 0; y < canvas.height; y += CONFIG.gridSize) {
+                ctx.moveTo(0, y); ctx.lineTo(canvas.width, y);
+            }
+            ctx.stroke();
+
+            // Draw Player
+            ctx.save();
+            ctx.translate(PLAYER.x, PLAYER.y);
+            ctx.rotate(INPUT.aimAngle);
+
+            // Tank Body
+            ctx.fillStyle = PLAYER.color;
+            if (PLAYER.flash > 0) {
+                ctx.fillStyle = '#ffff00'; // Flash yellow when shooting
+                PLAYER.flash -= 0.016; // Rough decrement
+            }
+            ctx.fillRect(-PLAYER.radius, -PLAYER.radius, PLAYER.radius * 2, PLAYER.radius * 2);
+
+            // Tank Barrel
+            ctx.fillStyle = PLAYER.barrelColor;
+            ctx.fillRect(0, -5, PLAYER.radius * 2, 10);
+
+            ctx.restore();
+
+            // Draw Mobile Joysticks (Visual Feedback)
+            if (STATE.isMobile) {
+                drawJoystick(INPUT.touches.leftStart, INPUT.touches.leftCurr);
+                drawJoystick(INPUT.touches.rightStart, INPUT.touches.rightCurr);
+            }
+        }
+
+        function drawJoystick(start, curr) {
+            if (start.x === 0 && start.y === 0) return;
+            
+            // Base
+            ctx.beginPath();
+            ctx.arc(start.x, start.y, 50, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Stick
+            ctx.beginPath();
+            ctx.arc(curr.x, curr.y, 20, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.fill();
+        }
+
+        // --- UI & SETTINGS ---
+        function setupUI() {
+            const btnSettings = document.getElementById('settings-btn');
+            const btnClose = document.getElementById('btn-close-settings');
+            const btnToggleFPS = document.getElementById('btn-toggle-fps');
+            const btnAutoFire = document.getElementById('btn-auto-fire');
+
+            btnSettings.onclick = () => {
+                STATE.isPaused = true;
+                settingsModal.style.display = 'block';
+            };
+
+            btnClose.onclick = () => {
+                STATE.isPaused = false;
+                settingsModal.style.display = 'none';
+                STATE.lastTime = performance.now(); // Reset time to prevent huge dt jump
+            };
+
+            btnToggleFPS.onclick = () => {
+                STATE.showFPS = !STATE.showFPS;
+                fpsDiv.style.display = STATE.showFPS ? 'block' : 'none';
+                btnToggleFPS.innerText = `Show FPS: ${STATE.showFPS ? 'ON' : 'OFF'}`;
+                btnToggleFPS.classList.toggle('active', STATE.showFPS);
+            };
+
+            btnAutoFire.onclick = () => {
+                STATE.mobileAutoFire = !STATE.mobileAutoFire;
+                btnAutoFire.innerText = `Mobile Auto-Fire: ${STATE.mobileAutoFire ? 'ON' : 'OFF'}`;
+                btnAutoFire.classList.toggle('active', STATE.mobileAutoFire);
+            };
+        }
+
+        // --- GAME LOOP ---
+        function gameLoop(timestamp) {
+            if (!STATE.lastTime) STATE.lastTime = timestamp;
+            const dt = (timestamp - STATE.lastTime) / 1000;
+            STATE.lastTime = timestamp;
+
+            update(dt);
+            draw();
+
+            // Update FPS (Roughly)
+            if (STATE.showFPS && Math.random() < 0.05) {
+                fpsDiv.innerText = `FPS: ${Math.round(1 / dt)}`;
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Launch
+        init();
+
+    </script>
+</body>
+</html>
