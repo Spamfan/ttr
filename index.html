@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TTR v10</title>
+    <title>TTR v11</title>
     <style>
         /* CORE STYLES */
         body {
@@ -22,8 +22,9 @@
             display: block;
         }
 
-        /* UI OVERLAY */
+        /* UI OVERLAY - Hidden initially for v11 fix */
         #ui-layer {
+            display: none; 
             position: absolute;
             top: 0;
             left: 0;
@@ -47,7 +48,7 @@
         }
         
         #fps-counter {
-            top: 60px; /* Moved down for Hearts/Cash */
+            top: 60px;
             right: 10px;
             text-align: right;
             font-size: 11px;
@@ -55,10 +56,9 @@
             opacity: 0.8;
         }
 
-        /* NEW HUD ELEMENTS */
         #hud-stats {
             top: 10px;
-            right: 50px; /* Left of pause button */
+            right: 50px;
             text-align: right;
             display: flex;
             flex-direction: column;
@@ -82,7 +82,7 @@
             border: 1px solid #fff;
         }
 
-        /* SCREENS & MODALS */
+        /* SCREENS */
         .fullscreen-modal {
             position: absolute;
             top: 0;
@@ -130,6 +130,18 @@
             pointer-events: auto;
         }
 
+        #pause-overlay {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 10;
+            pointer-events: auto; 
+        }
+
         .modal-btn {
             display: block;
             width: 100%;
@@ -141,7 +153,7 @@
             cursor: pointer;
             font-family: inherit;
             font-size: 14px;
-            touch-action: manipulation; /* Critical Fix */
+            touch-action: manipulation;
         }
 
         .modal-btn.active {
@@ -153,7 +165,6 @@
         #autofire-desc { font-size: 11px; color: #aaa; margin-bottom: 10px; font-style: italic; }
         #btn-copy-log { display: none; }
         
-        /* DEBUG OVERLAY */
         #debug-overlay {
             display: none;
             position: absolute;
@@ -183,7 +194,7 @@
     <div id="start-screen" class="fullscreen-modal">
         <h1>Tank Tycoon</h1>
         <button id="btn-start" class="big-btn">TAP TO START</button>
-        <div style="color:#666; margin-top:20px; font-size:12px;">v10</div>
+        <div style="color:#666; margin-top:20px; font-size:12px;">v11</div>
     </div>
 
     <!-- GAME OVER SCREEN -->
@@ -193,16 +204,15 @@
     </div>
 
     <div id="ui-layer">
-        <div id="version-display" class="hud-text">v10</div>
-        
-        <!-- HUD STATS -->
+        <div id="version-display" class="hud-text">v11</div>
         <div id="hud-stats" class="hud-text">
             <div id="hud-hearts" class="heart-row">❤❤❤</div>
             <div id="hud-cash" class="cash-row">$0</div>
         </div>
-        
         <div id="fps-counter" class="hud-text">FPS: --</div>
         <div id="pause-btn" class="hud-text">&#10074;&#10074;</div>
+
+        <div id="pause-overlay"></div>
 
         <div id="pause-modal">
             <h3>PAUSED</h3>
@@ -219,31 +229,25 @@
 
     <script>
         /** 
-         * TTR ENGINE v10
-         * Features: "Wanted" Water Visuals, Enemies, Combat, Loot, Pro Fixes
+         * TTR ENGINE v11 - HOTFIX
+         * Fixes: Fatal Crash in Spawn Logic (OOB), UI Layering, Pause Menu Logic
          */
 
-        const VERSION = "v10";
+        const VERSION = "v11";
 
         // --- CONFIG ---
         const CONFIG = {
             tileSize: 64,
             worldTiles: 50, // 3200x3200
             get worldSize() { return this.tileSize * this.worldTiles; },
-            
             playerSpeed: 250, 
-            waterSpeedMult: 0.5, // 50% slow (Requested)
-            
+            waterSpeedMult: 0.5, 
             fireRate: 1.0, 
             bulletSpeed: 700, 
             bulletLife: 1.5,
-            
-            // Visuals
             grassBaseColor: '#2d4c1e',
             waterBaseColor: '#4FC3F7',
             gridColor: 'rgba(255, 255, 255, 0.2)',
-            
-            // Controls
             joystickDeadzone: 0.2,
             cameraLerp: 0.1
         };
@@ -349,7 +353,6 @@
             }
         };
 
-        // --- GAME OBJECTS ---
         const PLAYER = { 
             x: 1600, y: 1600, radius: 20, 
             color: '#37474F', turretColor: '#546E7A', barrelColor: '#263238', treadColor: '#212121', 
@@ -363,7 +366,6 @@
         let LOOT = [];
         let WORLD_MAP = []; 
 
-        // --- RENDERING ---
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d', { alpha: false });
         let worldCanvas = null;
@@ -377,12 +379,10 @@
             setupInputs();
             setupUI();
 
-            // App Switch Handling
             window.addEventListener('blur', () => {
                 if (STATE.gameStarted && !STATE.isPaused && !STATE.gameOver) {
                     togglePause(true);
                     resetInputs();
-                    log("App Blur: Paused.");
                 }
             });
 
@@ -409,33 +409,40 @@
             for(let i=0; i<8; i++) {
                 let safe = false;
                 let ex, ey;
-                while(!safe) {
+                let attempts = 0;
+                while(!safe && attempts < 100) {
+                    attempts++;
                     ex = Math.random() * CONFIG.worldSize;
                     ey = Math.random() * CONFIG.worldSize;
-                    const gx = Math.floor(ex/CONFIG.tileSize);
-                    const gy = Math.floor(ey/CONFIG.tileSize);
-                    // Check if water or too close to player
+                    // SAFEGUARD: Clamp logic to prevent crash
+                    const gx = Math.max(0, Math.min(Math.floor(ex/CONFIG.tileSize), CONFIG.worldTiles - 1));
+                    const gy = Math.max(0, Math.min(Math.floor(ey/CONFIG.tileSize), CONFIG.worldTiles - 1));
+                    
                     const dist = Math.hypot(ex-PLAYER.x, ey-PLAYER.y);
                     if (WORLD_MAP[gx][gy] === 0 && dist > 600) safe = true;
                 }
-                ENEMIES.push({
-                    x: ex, y: ey, 
-                    angle: Math.random() * Math.PI * 2,
-                    cooldown: Math.random() * 2,
-                    hp: 3, maxHp: 3,
-                    radius: 20
-                });
+                if (safe) {
+                    ENEMIES.push({
+                        x: ex, y: ey, 
+                        angle: Math.random() * Math.PI * 2,
+                        cooldown: Math.random() * 2,
+                        hp: 3, maxHp: 3, radius: 20
+                    });
+                }
             }
+            log("Enemies Spawned: " + ENEMIES.length);
         }
 
-        // --- TERRAIN ---
         function generateTerrain() {
             WORLD_MAP = new Array(CONFIG.worldTiles).fill(0).map(() => new Array(CONFIG.worldTiles).fill(0));
-            // Reduced seeds for v10 (50% less)
             let seeds = 7; 
             for (let i=0; i<seeds; i++) {
                 let x = Math.floor(Math.random() * CONFIG.worldTiles);
                 let y = Math.floor(Math.random() * CONFIG.worldTiles);
+                // Safety
+                x = Math.max(0, Math.min(x, CONFIG.worldTiles - 1));
+                y = Math.max(0, Math.min(y, CONFIG.worldTiles - 1));
+                
                 WORLD_MAP[x][y] = 1;
                 let size = 3 + Math.floor(Math.random() * 8);
                 for (let j=0; j<size; j++) {
@@ -456,7 +463,7 @@
             worldCanvas.height = CONFIG.worldSize;
             const wCtx = worldCanvas.getContext('2d');
 
-            // 1. Grass Base
+            // Grass
             const pSize = 256;
             const pCan = document.createElement('canvas');
             pCan.width = pSize; pCan.height = pSize;
@@ -474,10 +481,10 @@
             wCtx.fillStyle = wCtx.createPattern(pCan, 'repeat');
             wCtx.fillRect(0, 0, CONFIG.worldSize, CONFIG.worldSize);
 
-            // 2. Organic Water (The "Wanted" Look - Stroke Smoothing)
+            // Water
             wCtx.lineCap = 'round';
             wCtx.lineJoin = 'round';
-            wCtx.lineWidth = 80; // Thicker than tile to merge
+            wCtx.lineWidth = 80; 
             wCtx.strokeStyle = CONFIG.waterBaseColor;
             
             wCtx.beginPath();
@@ -486,28 +493,19 @@
                     if (WORLD_MAP[x][y] === 1) {
                         const cx = (x * CONFIG.tileSize) + (CONFIG.tileSize/2);
                         const cy = (y * CONFIG.tileSize) + (CONFIG.tileSize/2);
-                        
-                        // Draw dot
                         wCtx.moveTo(cx, cy); wCtx.lineTo(cx, cy);
-                        
-                        // Connect Neighbors
-                        if (x+1 < CONFIG.worldTiles && WORLD_MAP[x+1][y] === 1) {
-                            wCtx.lineTo(cx + CONFIG.tileSize, cy);
-                        }
-                        // Reset to center for Y check
+                        if (x+1 < CONFIG.worldTiles && WORLD_MAP[x+1][y] === 1) wCtx.lineTo(cx + CONFIG.tileSize, cy);
                         wCtx.moveTo(cx, cy);
-                        if (y+1 < CONFIG.worldTiles && WORLD_MAP[x][y+1] === 1) {
-                            wCtx.lineTo(cx, cy + CONFIG.tileSize);
-                        }
+                        if (y+1 < CONFIG.worldTiles && WORLD_MAP[x][y+1] === 1) wCtx.lineTo(cx, cy + CONFIG.tileSize);
                     }
                 }
             }
             wCtx.stroke();
 
-            // 3. Grid
+            // Grid
             wCtx.strokeStyle = CONFIG.gridColor;
             wCtx.lineWidth = 1;
-            wCtx.lineCap = 'butt'; // Reset
+            wCtx.lineCap = 'butt'; 
             wCtx.beginPath();
             for (let x = 0; x <= CONFIG.worldSize; x += CONFIG.tileSize) {
                 wCtx.moveTo(x, 0); wCtx.lineTo(x, CONFIG.worldSize);
@@ -518,19 +516,17 @@
             wCtx.stroke();
         }
 
-        // --- INPUT ---
+        // --- INPUT & UPDATE ---
         function setupInputs() {
             window.addEventListener('keydown', e => { INPUT.keys[e.key.toLowerCase()] = true; STATE.isMobile = false; });
             window.addEventListener('keyup', e => { INPUT.keys[e.key.toLowerCase()] = false; });
             window.addEventListener('mousemove', e => { INPUT.mouse.x = e.clientX; INPUT.mouse.y = e.clientY; STATE.isMobile = false; });
             window.addEventListener('mousedown', () => { INPUT.mouse.down = true; STATE.isMobile = false; });
             window.addEventListener('mouseup', () => { INPUT.mouse.down = false; });
-
             canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
             canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
             canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
         }
-
         function handleTouchStart(e) {
             e.preventDefault();
             STATE.isMobile = true;
@@ -567,14 +563,11 @@
             }
         }
 
-        // --- UPDATE ---
         function update(dt) {
             if (!STATE.gameStarted || STATE.isPaused || STATE.gameOver) return;
-            
-            // Android Jitter Fix: Clamp DT
             if (dt > 0.1) dt = 0.1;
 
-            // --- PLAYER MOVEMENT ---
+            // Player Inputs
             if (STATE.isMobile) {
                 if (INPUT.touches.leftId !== null) {
                     const dx = INPUT.touches.leftCurr.x - INPUT.touches.leftStart.x;
@@ -607,16 +600,14 @@
                 INPUT.isFiring = INPUT.mouse.down;
             }
 
-            if (INPUT.moveVector.x !== 0 || INPUT.moveVector.y !== 0) {
-                PLAYER.bodyAngle = Math.atan2(INPUT.moveVector.y, INPUT.moveVector.x);
-            }
+            if (INPUT.moveVector.x !== 0 || INPUT.moveVector.y !== 0) PLAYER.bodyAngle = Math.atan2(INPUT.moveVector.y, INPUT.moveVector.x);
             PLAYER.turretAngle = INPUT.aimAngle;
 
-            // Physics (Water Check)
+            // Physics with Safety Clamping
             let currentSpeed = CONFIG.playerSpeed;
-            const gx = Math.floor(PLAYER.x / CONFIG.tileSize);
-            const gy = Math.floor(PLAYER.y / CONFIG.tileSize);
-            const inWater = (gx >= 0 && gx < CONFIG.worldTiles && gy >= 0 && gy < CONFIG.worldTiles && WORLD_MAP[gx][gy] === 1);
+            const gx = Math.max(0, Math.min(Math.floor(PLAYER.x / CONFIG.tileSize), CONFIG.worldTiles - 1));
+            const gy = Math.max(0, Math.min(Math.floor(PLAYER.y / CONFIG.tileSize), CONFIG.worldTiles - 1));
+            const inWater = (WORLD_MAP[gx][gy] === 1);
             
             if (inWater) {
                 currentSpeed *= CONFIG.waterSpeedMult;
@@ -636,24 +627,20 @@
             PLAYER.x = Math.max(PLAYER.radius, Math.min(CONFIG.worldSize - PLAYER.radius, PLAYER.x));
             PLAYER.y = Math.max(PLAYER.radius, Math.min(CONFIG.worldSize - PLAYER.radius, PLAYER.y));
             
-            // Camera
             const targetCamX = PLAYER.x - canvas.width / 2;
             const targetCamY = PLAYER.y - canvas.height / 2;
             CAMERA.x += (targetCamX - CAMERA.x) * CONFIG.cameraLerp;
             CAMERA.y += (targetCamY - CAMERA.y) * CONFIG.cameraLerp;
 
-            // Player Fire
             if (PLAYER.cooldown > 0) PLAYER.cooldown -= dt;
             if (INPUT.isFiring && PLAYER.cooldown <= 0) {
                 fireWeapon(PLAYER, 'player');
                 PLAYER.cooldown = CONFIG.fireRate;
             }
 
-            // --- ENEMIES ---
             for (let i = ENEMIES.length - 1; i >= 0; i--) {
                 let e = ENEMIES[i];
                 let dist = Math.hypot(PLAYER.x - e.x, PLAYER.y - e.y);
-                
                 if (dist < 600) {
                     e.angle = Math.atan2(PLAYER.y - e.y, PLAYER.x - e.x);
                     if (e.cooldown > 0) e.cooldown -= dt;
@@ -664,41 +651,28 @@
                 }
             }
 
-            // --- BULLETS ---
             for (let i = BULLETS.length - 1; i >= 0; i--) {
                 const b = BULLETS[i];
                 b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
-                
                 let hit = false;
-                // Hit Enemy
                 if (b.owner === 'player') {
                     for (let j = ENEMIES.length - 1; j >= 0; j--) {
                         let e = ENEMIES[j];
                         if (Math.hypot(b.x - e.x, b.y - e.y) < e.radius + 5) {
-                            e.hp--;
-                            hit = true;
-                            if (e.hp <= 0) {
-                                dropLoot(e.x, e.y);
-                                ENEMIES.splice(j, 1);
-                            }
+                            e.hp--; hit = true;
+                            if (e.hp <= 0) { dropLoot(e.x, e.y); ENEMIES.splice(j, 1); }
                             break;
                         }
                     }
-                } 
-                // Hit Player
-                else if (b.owner === 'enemy') {
+                } else if (b.owner === 'enemy') {
                     if (Math.hypot(b.x - PLAYER.x, b.y - PLAYER.y) < PLAYER.radius + 5) {
-                        PLAYER.hp--;
-                        updateHUD();
-                        hit = true;
+                        PLAYER.hp--; updateHUD(); hit = true;
                         if (PLAYER.hp <= 0) doGameOver();
                     }
                 }
-
                 if (b.life <= 0 || hit) BULLETS.splice(i, 1);
             }
 
-            // --- LOOT ---
             for (let i = LOOT.length - 1; i >= 0; i--) {
                 let l = LOOT[i];
                 if (Math.hypot(PLAYER.x - l.x, PLAYER.y - l.y) < PLAYER.radius + 15) {
@@ -711,7 +685,6 @@
                 }
             }
 
-            // Particles
             for (let i = PARTICLES.length - 1; i >= 0; i--) {
                 const p = PARTICLES[i];
                 p.life -= dt;
@@ -736,9 +709,9 @@
         function dropLoot(x, y) {
             const rand = Math.random();
             let type = 0;
-            if (rand < 0.33) type = 0; // Heart
-            else if (rand < 0.66) type = 2; // $5
-            else type = 1; // $1
+            if (rand < 0.33) type = 0; 
+            else if (rand < 0.66) type = 2; 
+            else type = 1; 
             LOOT.push({ x, y, type });
         }
 
@@ -755,34 +728,25 @@
         }
 
         function respawn() {
-            PLAYER.hp = 3;
-            PLAYER.x = 1600;
-            PLAYER.y = 1600;
-            STATE.gameOver = false;
-            BULLETS = [];
+            PLAYER.hp = 3; PLAYER.x = 1600; PLAYER.y = 1600;
+            STATE.gameOver = false; BULLETS = [];
             updateHUD();
             document.getElementById('game-over-screen').style.display = 'none';
-            // Reset inputs
             resetInputs();
-            // Snap camera
             CAMERA.x = PLAYER.x - canvas.width/2;
             CAMERA.y = PLAYER.y - canvas.height/2;
         }
 
-        // --- DRAW ---
         function draw() {
-            // Void
             ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
             if (!worldCanvas) return;
 
             ctx.save();
-            ctx.translate(-CAMERA.x, -CAMERA.y); // No rounding for 120Hz
+            ctx.translate(-CAMERA.x, -CAMERA.y);
 
-            // World
             ctx.drawImage(worldCanvas, 0, 0);
             ctx.strokeStyle = '#555'; ctx.lineWidth = 5; ctx.strokeRect(0, 0, CONFIG.worldSize, CONFIG.worldSize);
 
-            // Loot
             for (let l of LOOT) {
                 ctx.save(); ctx.translate(l.x, l.y);
                 if (l.type === 0) { ctx.fillStyle = '#ff3333'; ctx.font = "20px Arial"; ctx.fillText("❤", -10, 5); }
@@ -791,33 +755,23 @@
                 ctx.restore();
             }
 
-            // Particles
             for (let p of PARTICLES) {
                 ctx.fillStyle = p.color; ctx.globalAlpha = p.life * 2;
                 ctx.fillRect(p.x, p.y, p.size, p.size); ctx.globalAlpha = 1.0;
             }
 
-            // Enemies
             for (let e of ENEMIES) {
                 ctx.save(); ctx.translate(e.x, e.y);
-                // Health bar
                 ctx.fillStyle = 'red'; ctx.fillRect(-15, -35, 30, 4);
                 ctx.fillStyle = '#0f0'; ctx.fillRect(-15, -35, 30 * (e.hp/e.maxHp), 4);
-                
                 ctx.rotate(e.angle);
-                ctx.fillStyle = '#C62828'; // Red body
-                ctx.fillRect(-20, -18, 40, 36);
-                ctx.fillStyle = '#8E0000'; // Dark Red Treads
-                ctx.fillRect(-20, -22, 40, 4); ctx.fillRect(-20, 18, 40, 4);
-                
-                // Turret
-                ctx.fillStyle = '#B71C1C';
-                ctx.fillRect(0, -4, 35, 8);
+                ctx.fillStyle = '#C62828'; ctx.fillRect(-20, -18, 40, 36);
+                ctx.fillStyle = '#8E0000'; ctx.fillRect(-20, -22, 40, 4); ctx.fillRect(-20, 18, 40, 4);
+                ctx.fillStyle = '#B71C1C'; ctx.fillRect(0, -4, 35, 8);
                 ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
                 ctx.restore();
             }
 
-            // Bullets
             ctx.lineWidth = 3; ctx.beginPath();
             for (let b of BULLETS) {
                 ctx.strokeStyle = (b.owner === 'player') ? '#ffff00' : '#ff0000';
@@ -827,7 +781,6 @@
             }
             ctx.stroke();
 
-            // Player
             ctx.save(); ctx.translate(PLAYER.x, PLAYER.y);
             ctx.save(); ctx.rotate(PLAYER.bodyAngle);
             ctx.fillStyle = PLAYER.color; ctx.fillRect(-20, -18, 40, 36);
@@ -839,9 +792,8 @@
             ctx.strokeStyle = PLAYER.barrelColor; ctx.lineWidth = 1.5; ctx.stroke();
             ctx.restore(); ctx.restore();
 
-            ctx.restore(); // Camera End
+            ctx.restore();
 
-            // UI
             if (STATE.gameStarted && !STATE.isPaused && !STATE.gameOver) {
                 if (INPUT.touches.leftId !== null) drawJoystick(INPUT.touches.leftStart, INPUT.touches.leftCurr);
                 if (INPUT.touches.rightId !== null) drawJoystick(INPUT.touches.rightStart, INPUT.touches.rightCurr);
@@ -856,13 +808,10 @@
         }
 
         function setupUI() {
-            // Helper for critical buttons
             const bindBtn = (id, callback) => {
                 const el = document.getElementById(id);
-                // Aggressive Binding
                 const handler = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
+                    e.preventDefault(); e.stopPropagation();
                     callback(el);
                     return false;
                 };
@@ -875,6 +824,7 @@
                 STATE.gameStarted = true;
                 spawnEnemies();
                 document.getElementById('start-screen').style.display = 'none';
+                document.getElementById('ui-layer').style.display = 'block'; // SHOW UI NOW
                 CAMERA.x = PLAYER.x - canvas.width/2;
                 CAMERA.y = PLAYER.y - canvas.height/2;
             });
@@ -891,7 +841,6 @@
             bindBtn('pause-btn', () => togglePause(true));
             bindBtn('btn-close-pause', () => togglePause(false));
             
-            // Overlay close check
             const overlay = document.getElementById('pause-overlay');
             const closeIfBg = (e) => {
                 if (e.target === overlay) {
@@ -940,7 +889,6 @@
             update(dt);
             draw();
             
-            // PRO FPS (Avg + 1% Low)
             if (STATE.showFPS && dt > 0) {
                 const currentFPS = 1 / dt;
                 FPS.buffer.push(currentFPS);
