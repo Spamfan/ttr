@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TTR v8</title>
+    <title>TTR v9</title>
     <style>
         /* CORE STYLES */
         body {
@@ -50,7 +50,8 @@
             top: 50px;
             right: 10px;
             text-align: right;
-            font-size: 14px;
+            font-size: 12px;
+            color: #0f0;
         }
 
         #pause-btn {
@@ -65,6 +66,34 @@
             background: rgba(0,0,0,0.3);
             border-radius: 4px;
             border: 1px solid #fff;
+        }
+
+        /* START SCREEN */
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
+            pointer-events: auto;
+        }
+
+        #btn-start {
+            padding: 20px 40px;
+            font-size: 24px;
+            background: #00dd00;
+            color: #000;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 0 20px #00dd00;
         }
 
         /* PAUSE OVERLAY */
@@ -158,9 +187,16 @@
 
     <canvas id="gameCanvas"></canvas>
 
+    <!-- START SCREEN -->
+    <div id="start-screen">
+        <h1 style="color:white; margin-bottom: 30px;">TANK TYCOON</h1>
+        <button id="btn-start">TAP TO START</button>
+        <div style="color:#666; margin-top:20px; font-size:12px;">v9</div>
+    </div>
+
     <div id="ui-layer">
-        <div id="version-display" class="hud-text">v8</div>
-        <div id="fps-counter" class="hud-text">FPS: 60</div>
+        <div id="version-display" class="hud-text">v9</div>
+        <div id="fps-counter" class="hud-text">FPS: --</div>
         <div id="pause-btn" class="hud-text">&#10074;&#10074;</div>
 
         <div id="pause-overlay"></div>
@@ -169,7 +205,6 @@
             <h3>PAUSED</h3>
             <button id="btn-toggle-fps" class="modal-btn active">Show FPS: ON</button>
             
-            <!-- Auto Fire Overhaul -->
             <button id="btn-auto-fire" class="modal-btn active">Auto-Fire: ANY</button>
             <div id="autofire-desc">Fires when right stick is touched.</div>
 
@@ -183,39 +218,52 @@
 
     <script>
         /** 
-         * TTR ENGINE v8
-         * Changes: Tank Rotation Fix, Camera Smoothing, Border Rendering, Grid Visibility, Auto-Fire Modes, iOS Audio Persistence
+         * TTR ENGINE v9
+         * Features: Start Screen, Organic Terrain Gen (Water), Water Physics/FX, Pro FPS, Crit UI Fixes
          */
 
-        const VERSION = "v8";
+        const VERSION = "v9";
 
         // --- CONFIG ---
         const CONFIG = {
-            worldSize: 3200,
+            tileSize: 64,
+            worldTiles: 50, // 50x50 grid = 3200x3200
+            get worldSize() { return this.tileSize * this.worldTiles; },
+            
             playerSpeed: 250, 
+            waterSpeedMult: 0.7, // 30% slow
             fireRate: 1.0, 
             bulletSpeed: 700, 
             bulletLife: 1.5,
+            
             grassBaseColor: '#2d4c1e',
-            gridColor: 'rgba(255, 255, 255, 0.2)', // Increased Opacity (was 0.07)
-            gridSize: 64,
+            waterBaseColor: '#4FC3F7',
+            gridColor: 'rgba(255, 255, 255, 0.2)',
+            
             joystickDeadzone: 0.2,
             cameraLerp: 0.1
         };
 
         // --- STATE ---
         const STATE = {
+            gameStarted: false,
             lastTime: 0, 
             showFPS: true, 
             showDebug: false,
             autoFireMode: 0, // 0: Any, 1: Aiming
             isMobile: false, 
             isPaused: false, 
-            audioInitialized: false
+            audioInitialized: false,
+            wasInWater: false
         };
 
         const CAMERA = { x: 0, y: 0 };
-        const FPS = { current: 60, min: 60, max: 60, buffer: [], lastUpdate: 0 };
+        // FPS: using a buffer for 1% low calc
+        const FPS = { 
+            buffer: [], 
+            lastUpdate: 0,
+            display: "FPS: --" 
+        };
         const DEBUG_LOG = [];
 
         function log(message) {
@@ -233,37 +281,59 @@
         
         // --- AUDIO ---
         let audioCtx = null;
+        let splashBuffer = null;
+
         function initAudio() {
             if (STATE.audioInitialized) return;
             try {
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
                 audioCtx = new AudioContext();
                 STATE.audioInitialized = true;
-                log("Audio Context Created.");
+                createSplashSound();
+                log("Audio Context Created via Start Screen.");
             } catch (e) { log("Error: Audio Context failed."); }
         }
 
-        function playShootSound() {
+        // Procedural White Noise for Splash
+        function createSplashSound() {
             if (!audioCtx) return;
-            // iOS Final Boss Fix: Force Resume if suspended
-            if (audioCtx.state !== 'running') {
-                audioCtx.resume();
+            const bufferSize = audioCtx.sampleRate * 0.5; // 0.5 seconds
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = (Math.random() * 2 - 1) * (1 - i/bufferSize); // Fade out
             }
+            splashBuffer = buffer;
+        }
 
-            try {
+        function playSound(type) {
+            if (!audioCtx || audioCtx.state !== 'running') return;
+            
+            const gainNode = audioCtx.createGain();
+            gainNode.connect(audioCtx.destination);
+
+            if (type === 'shoot') {
                 const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
                 osc.type = 'square';
                 osc.frequency.setValueAtTime(400, audioCtx.currentTime);
                 osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
-                gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
+                gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.connect(gainNode);
                 osc.start();
                 osc.stop(audioCtx.currentTime + 0.1);
-            } catch (e) {
-                // Ignore errors if audio system is busy
+            } else if (type === 'splash' && splashBuffer) {
+                const source = audioCtx.createBufferSource();
+                source.buffer = splashBuffer;
+                // Low pass filter to make it sound like water
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = "lowpass";
+                filter.frequency.value = 1000;
+                
+                source.connect(filter);
+                filter.connect(gainNode);
+                gainNode.gain.value = 0.2;
+                source.start();
             }
         }
 
@@ -279,44 +349,46 @@
 
         const PLAYER = { 
             x: 1600, y: 1600, radius: 20, 
-            color: '#37474F', 
-            turretColor: '#546E7A', 
-            barrelColor: '#263238', 
-            treadColor: '#212121', 
+            color: '#37474F', turretColor: '#546E7A', barrelColor: '#263238', treadColor: '#212121', 
             cooldown: 0, bodyAngle: 0, turretAngle: 0 
         };
+        
         let BULLETS = [];
+        let PARTICLES = [];
+        let WORLD_MAP = []; // 2D Array: 0=Grass, 1=Water
 
         // --- RENDERING ---
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d', { alpha: false });
-        let backgroundPattern = null;
+        let worldCanvas = null; // The massive pre-rendered map
 
         function init() {
             log(`Initializing TTR ${VERSION}`);
-            createProceduralBackground();
+            
+            // Generate World
+            generateTerrain();
+            createWorldBackground();
+            
             resize();
             window.addEventListener('resize', resize);
             
             setupInputs();
             setupUI();
-            
-            // Persistent Audio Unlocker
-            const unlockAudio = () => {
-                if (!audioCtx) initAudio();
-                if (audioCtx && audioCtx.state !== 'running') {
-                    audioCtx.resume().then(() => {
-                        log("Audio Resumed (Unlock Success).");
-                        // Only remove listener if success
-                        window.removeEventListener('touchstart', unlockAudio);
-                        window.removeEventListener('mousedown', unlockAudio);
-                    }).catch(e => {
-                        // Keep listener attached to try again next touch
-                    });
+
+            // App Switch (Blur) Handling
+            window.addEventListener('blur', () => {
+                if (STATE.gameStarted && !STATE.isPaused) {
+                    document.getElementById('pause-btn').click(); // Trigger pause
+                    // Reset Inputs
+                    INPUT.keys = {};
+                    INPUT.mouse.down = false;
+                    INPUT.touches.leftId = null;
+                    INPUT.touches.rightId = null;
+                    INPUT.moveVector = {x:0, y:0};
+                    INPUT.isFiring = false;
+                    log("App backgrounded. Paused.");
                 }
-            };
-            window.addEventListener('touchstart', unlockAudio);
-            window.addEventListener('mousedown', unlockAudio);
+            });
 
             requestAnimationFrame(gameLoop);
         }
@@ -324,37 +396,111 @@
         function resize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
+            // Recenter camera if not started
+            if (!STATE.gameStarted) {
+                CAMERA.x = PLAYER.x - canvas.width/2;
+                CAMERA.y = PLAYER.y - canvas.height/2;
+            }
         }
 
-        function createProceduralBackground() {
-            const tileSize = 256;
-            const tileCanvas = document.createElement('canvas');
-            tileCanvas.width = tileSize;
-            tileCanvas.height = tileSize;
-            const tCtx = tileCanvas.getContext('2d');
+        // --- TERRAIN GENERATION ---
+        function generateTerrain() {
+            // Init empty
+            WORLD_MAP = new Array(CONFIG.worldTiles).fill(0).map(() => new Array(CONFIG.worldTiles).fill(0));
+            
+            // Seed Lakes
+            let seeds = 15;
+            for (let i=0; i<seeds; i++) {
+                let x = Math.floor(Math.random() * CONFIG.worldTiles);
+                let y = Math.floor(Math.random() * CONFIG.worldTiles);
+                WORLD_MAP[x][y] = 1;
+                
+                // Grow Lake
+                let size = 3 + Math.floor(Math.random() * 8);
+                for (let j=0; j<size; j++) {
+                    // Spread randomly
+                    x += Math.floor(Math.random() * 3) - 1;
+                    y += Math.floor(Math.random() * 3) - 1;
+                    if (x >= 0 && x < CONFIG.worldTiles && y >= 0 && y < CONFIG.worldTiles) {
+                        WORLD_MAP[x][y] = 1;
+                        // Fatten the lake (fill neighbors)
+                        if (x+1 < CONFIG.worldTiles) WORLD_MAP[x+1][y] = 1;
+                        if (y+1 < CONFIG.worldTiles) WORLD_MAP[x][y+1] = 1;
+                    }
+                }
+            }
+            log("Terrain Generated.");
+        }
 
-            tCtx.fillStyle = CONFIG.grassBaseColor;
-            tCtx.fillRect(0, 0, tileSize, tileSize);
+        function createWorldBackground() {
+            worldCanvas = document.createElement('canvas');
+            worldCanvas.width = CONFIG.worldSize;
+            worldCanvas.height = CONFIG.worldSize;
+            const wCtx = worldCanvas.getContext('2d');
 
-            for(let i=0; i<1000; i++) {
-                const x = Math.random() * tileSize;
-                const y = Math.random() * tileSize;
-                const length = 2 + Math.random() * 4;
+            // 1. Draw Infinite Grass Pattern Base
+            // Create a small temp pattern for the grass noise
+            const pSize = 256;
+            const pCan = document.createElement('canvas');
+            pCan.width = pSize; pCan.height = pSize;
+            const pCtx = pCan.getContext('2d');
+            pCtx.fillStyle = CONFIG.grassBaseColor;
+            pCtx.fillRect(0,0,pSize,pSize);
+            for(let i=0; i<800; i++) {
+                const x = Math.random() * pSize;
+                const y = Math.random() * pSize;
+                const len = 2 + Math.random() * 4;
                 const shade = 5 + Math.random() * 15;
-                tCtx.strokeStyle = `rgba(0, ${shade}, 0, 0.3)`;
-                tCtx.beginPath();
-                tCtx.moveTo(x, y);
-                tCtx.lineTo(x, y - length);
-                tCtx.stroke();
+                pCtx.strokeStyle = `rgba(0, ${shade}, 0, 0.3)`;
+                pCtx.beginPath(); pCtx.moveTo(x,y); pCtx.lineTo(x, y-len); pCtx.stroke();
+            }
+            const grassPattern = wCtx.createPattern(pCan, 'repeat');
+            wCtx.fillStyle = grassPattern;
+            wCtx.fillRect(0, 0, CONFIG.worldSize, CONFIG.worldSize);
+
+            // 2. Draw Organic Water
+            for (let x = 0; x < CONFIG.worldTiles; x++) {
+                for (let y = 0; y < CONFIG.worldTiles; y++) {
+                    if (WORLD_MAP[x][y] === 1) {
+                        const tx = x * CONFIG.tileSize;
+                        const ty = y * CONFIG.tileSize;
+                        
+                        // Base square
+                        wCtx.fillStyle = CONFIG.waterBaseColor;
+                        wCtx.fillRect(tx, ty, CONFIG.tileSize, CONFIG.tileSize);
+
+                        // Organic Blobs (The "Bottom Left" Look)
+                        // Draw circles around the center to wobble the edges
+                        for (let k=0; k<4; k++) {
+                            let rx = tx + Math.random() * CONFIG.tileSize;
+                            let ry = ty + Math.random() * CONFIG.tileSize;
+                            let r = (CONFIG.tileSize/3) + Math.random() * (CONFIG.tileSize/3);
+                            wCtx.beginPath();
+                            wCtx.arc(rx, ry, r, 0, Math.PI*2);
+                            wCtx.fill();
+                        }
+                    }
+                }
             }
 
-            tCtx.strokeStyle = CONFIG.gridColor;
-            tCtx.lineWidth = 1;
-            tCtx.strokeRect(0, 0, CONFIG.gridSize, CONFIG.gridSize);
-
-            backgroundPattern = ctx.createPattern(tileCanvas, 'repeat');
+            // 3. Draw Grid Overlay
+            wCtx.strokeStyle = CONFIG.gridColor;
+            wCtx.lineWidth = 1;
+            wCtx.beginPath();
+            // Vertical lines
+            for (let x = 0; x <= CONFIG.worldSize; x += CONFIG.tileSize) {
+                wCtx.moveTo(x, 0); wCtx.lineTo(x, CONFIG.worldSize);
+            }
+            // Horizontal lines
+            for (let y = 0; y <= CONFIG.worldSize; y += CONFIG.tileSize) {
+                wCtx.moveTo(0, y); wCtx.lineTo(CONFIG.worldSize, y);
+            }
+            wCtx.stroke();
+            
+            log("World Background Rendered.");
         }
 
+        // --- INPUT ---
         function setupInputs() {
             window.addEventListener('keydown', e => { INPUT.keys[e.key.toLowerCase()] = true; STATE.isMobile = false; });
             window.addEventListener('keyup', e => { INPUT.keys[e.key.toLowerCase()] = false; });
@@ -387,11 +533,8 @@
         function handleTouchMove(e) {
             e.preventDefault();
             for (let t of e.changedTouches) {
-                if (t.identifier === INPUT.touches.leftId) {
-                    INPUT.touches.leftCurr = { x: t.clientX, y: t.clientY };
-                } else if (t.identifier === INPUT.touches.rightId) {
-                    INPUT.touches.rightCurr = { x: t.clientX, y: t.clientY };
-                }
+                if (t.identifier === INPUT.touches.leftId) INPUT.touches.leftCurr = { x: t.clientX, y: t.clientY };
+                else if (t.identifier === INPUT.touches.rightId) INPUT.touches.rightCurr = { x: t.clientX, y: t.clientY };
             }
         }
 
@@ -409,8 +552,9 @@
         }
 
         function update(dt) {
-            if (STATE.isPaused) return;
+            if (!STATE.gameStarted || STATE.isPaused) return;
 
+            // --- INPUT PROCESSING ---
             if (STATE.isMobile) {
                 if (INPUT.touches.leftId !== null) {
                     const dx = INPUT.touches.leftCurr.x - INPUT.touches.leftStart.x;
@@ -425,19 +569,9 @@
                     const dx = INPUT.touches.rightCurr.x - INPUT.touches.rightStart.x;
                     const dy = INPUT.touches.rightCurr.y - INPUT.touches.rightStart.y;
                     const dist = Math.sqrt(dx*dx + dy*dy);
-                    
-                    if ((dist / 50) > CONFIG.joystickDeadzone) {
-                        INPUT.aimAngle = Math.atan2(dy, dx);
-                    }
-
-                    // Auto-Fire Logic
-                    if (STATE.autoFireMode === 0) {
-                        // Mode 0: Any Touch
-                        INPUT.isFiring = true;
-                    } else {
-                        // Mode 1: Aiming Only (Past deadzone)
-                        INPUT.isFiring = (dist / 50) > CONFIG.joystickDeadzone;
-                    }
+                    if ((dist / 50) > CONFIG.joystickDeadzone) INPUT.aimAngle = Math.atan2(dy, dx);
+                    if (STATE.autoFireMode === 0) INPUT.isFiring = true;
+                    else INPUT.isFiring = (dist / 50) > CONFIG.joystickDeadzone;
                 }
             } else {
                 INPUT.moveVector = { x: 0, y: 0 };
@@ -458,34 +592,72 @@
             }
             PLAYER.turretAngle = INPUT.aimAngle;
 
-            PLAYER.x += INPUT.moveVector.x * CONFIG.playerSpeed * dt;
-            PLAYER.y += INPUT.moveVector.y * CONFIG.playerSpeed * dt;
+            // --- PHYSICS & TERRAIN ---
+            let currentSpeed = CONFIG.playerSpeed;
             
-            // World Bound Constraints
+            // Check Terrain
+            const gx = Math.floor(PLAYER.x / CONFIG.tileSize);
+            const gy = Math.floor(PLAYER.y / CONFIG.tileSize);
+            const inWater = (gx >= 0 && gx < CONFIG.worldTiles && gy >= 0 && gy < CONFIG.worldTiles && WORLD_MAP[gx][gy] === 1);
+            
+            if (inWater) {
+                currentSpeed *= CONFIG.waterSpeedMult;
+                
+                // Water Splash FX
+                if (!STATE.wasInWater) playSound('splash');
+                
+                // Splash Particles
+                if (INPUT.moveVector.x !== 0 || INPUT.moveVector.y !== 0) {
+                    if (Math.random() < 0.3) {
+                        PARTICLES.push({
+                            x: PLAYER.x + (Math.random()-0.5)*20,
+                            y: PLAYER.y + (Math.random()-0.5)*20,
+                            size: 3 + Math.random()*4,
+                            life: 0.5,
+                            color: '#81D4FA'
+                        });
+                    }
+                }
+            }
+            STATE.wasInWater = inWater;
+
+            PLAYER.x += INPUT.moveVector.x * currentSpeed * dt;
+            PLAYER.y += INPUT.moveVector.y * currentSpeed * dt;
+            
+            // World Bounds
             PLAYER.x = Math.max(PLAYER.radius, Math.min(CONFIG.worldSize - PLAYER.radius, PLAYER.x));
             PLAYER.y = Math.max(PLAYER.radius, Math.min(CONFIG.worldSize - PLAYER.radius, PLAYER.y));
             
-            // Camera Lerp
+            // Camera (No Rounding for 120Hz)
             const targetCamX = PLAYER.x - canvas.width / 2;
             const targetCamY = PLAYER.y - canvas.height / 2;
             CAMERA.x += (targetCamX - CAMERA.x) * CONFIG.cameraLerp;
             CAMERA.y += (targetCamY - CAMERA.y) * CONFIG.cameraLerp;
 
+            // Combat
             if (PLAYER.cooldown > 0) PLAYER.cooldown -= dt;
             if (INPUT.isFiring && PLAYER.cooldown <= 0) {
                 fireWeapon();
                 PLAYER.cooldown = CONFIG.fireRate;
             }
             
+            // Bullets
             for (let i = BULLETS.length - 1; i >= 0; i--) {
                 const b = BULLETS[i];
                 b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
                 if (b.life <= 0) BULLETS.splice(i, 1);
             }
+
+            // Particles
+            for (let i = PARTICLES.length - 1; i >= 0; i--) {
+                const p = PARTICLES[i];
+                p.life -= dt;
+                if (p.life <= 0) PARTICLES.splice(i, 1);
+            }
         }
 
         function fireWeapon() {
-            playShootSound();
+            playSound('shoot');
             const bX = PLAYER.x + Math.cos(PLAYER.turretAngle) * 35;
             const bY = PLAYER.y + Math.sin(PLAYER.turretAngle) * 35;
             BULLETS.push({
@@ -501,18 +673,28 @@
             ctx.fillStyle = '#000000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            ctx.save();
-            // 2. Move Camera (Integer Rounded for smoothness)
-            ctx.translate(Math.round(-CAMERA.x), Math.round(-CAMERA.y));
+            if (!worldCanvas) return; // Wait for generation
 
-            // 3. Draw World Background ONLY inside bounds
-            ctx.fillStyle = backgroundPattern;
-            ctx.fillRect(0, 0, CONFIG.worldSize, CONFIG.worldSize);
+            ctx.save();
+            // 2. Camera Transform (Sub-pixel enabled)
+            ctx.translate(-CAMERA.x, -CAMERA.y);
+
+            // 3. Draw Visible Portion of World
+            // Optimization: Only draw what's on screen
+            ctx.drawImage(worldCanvas, 0, 0);
             
-            // 4. Draw World Border Line
+            // 4. World Border
             ctx.strokeStyle = '#555';
             ctx.lineWidth = 5;
             ctx.strokeRect(0, 0, CONFIG.worldSize, CONFIG.worldSize);
+
+            // Particles
+            for (let p of PARTICLES) {
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life * 2;
+                ctx.fillRect(p.x, p.y, p.size, p.size);
+                ctx.globalAlpha = 1.0;
+            }
 
             // Bullets
             ctx.strokeStyle = '#ffff00'; ctx.lineWidth = 3; ctx.beginPath();
@@ -527,31 +709,31 @@
             ctx.save();
             ctx.translate(PLAYER.x, PLAYER.y);
             
-            // Body (Rotated: Width > Height, Treads on Top/Bottom)
+            // Body
             ctx.save();
             ctx.rotate(PLAYER.bodyAngle);
             ctx.fillStyle = PLAYER.color;
-            ctx.fillRect(-20, -18, 40, 36); // Main Body (Wide)
+            ctx.fillRect(-20, -18, 40, 36); 
             ctx.fillStyle = PLAYER.treadColor;
-            ctx.fillRect(-20, -22, 40, 4); // Top Tread
-            ctx.fillRect(-20, 18, 40, 4);  // Bottom Tread
+            ctx.fillRect(-20, -22, 40, 4); 
+            ctx.fillRect(-20, 18, 40, 4);  
             ctx.restore();
             
             // Turret
             ctx.save();
             ctx.rotate(PLAYER.turretAngle);
             ctx.fillStyle = PLAYER.barrelColor;
-            ctx.fillRect(0, -4, 35, 8); // Barrel
+            ctx.fillRect(0, -4, 35, 8); 
             ctx.fillStyle = PLAYER.turretColor;
-            ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill(); // Dome
+            ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = PLAYER.barrelColor; ctx.lineWidth = 1.5; ctx.stroke();
             ctx.restore();
             
             ctx.restore();
-            ctx.restore(); // End Camera Translation
+            ctx.restore(); // End Camera
 
-            // UI Elements (Not Camera Relative)
-            if (!STATE.isPaused) {
+            // UI Elements
+            if (STATE.gameStarted && !STATE.isPaused) {
                 if (INPUT.touches.leftId !== null) drawJoystick(INPUT.touches.leftStart, INPUT.touches.leftCurr);
                 if (INPUT.touches.rightId !== null) drawJoystick(INPUT.touches.rightStart, INPUT.touches.rightCurr);
             }
@@ -565,14 +747,22 @@
         }
 
         function setupUI() {
+            // Start Screen
+            const btnStart = document.getElementById('btn-start');
+            btnStart.onclick = () => {
+                initAudio();
+                STATE.gameStarted = true;
+                document.getElementById('start-screen').style.display = 'none';
+                // Snap camera
+                CAMERA.x = PLAYER.x - canvas.width/2;
+                CAMERA.y = PLAYER.y - canvas.height/2;
+            };
+
+            // Pause Logic
             const btnPause = document.getElementById('pause-btn');
-            const btnResume = document.getElementById('btn-close-pause');
-            const btnCopy = document.getElementById('btn-copy-log');
             const overlay = document.getElementById('pause-overlay');
             const modal = document.getElementById('pause-modal');
             const debug = document.getElementById('debug-overlay');
-            const btnAutoFire = document.getElementById('btn-auto-fire');
-            const txtAutoFire = document.getElementById('autofire-desc');
 
             const togglePause = (pause) => {
                 STATE.isPaused = pause;
@@ -591,62 +781,62 @@
                 togglePause(false); 
             };
 
-            // Fix: Add touchend to all UI interactions
+            // Fix: Check target to prevent ghost clicks from background
+            overlay.onclick = (e) => {
+                if (e.target === overlay) closeMenu(e);
+            };
+            overlay.ontouchend = (e) => {
+                if (e.target === overlay) closeMenu(e);
+            };
+
             btnPause.onclick = (e) => { e.stopPropagation(); togglePause(true); };
             btnPause.ontouchend = (e) => { e.preventDefault(); e.stopPropagation(); togglePause(true); };
             
+            const btnResume = document.getElementById('btn-close-pause');
             btnResume.onclick = closeMenu;
             btnResume.ontouchend = closeMenu;
-            overlay.onclick = closeMenu;
-            overlay.ontouchend = closeMenu;
 
-            const btnFps = document.getElementById('btn-toggle-fps');
-            const toggleFps = (e) => {
-                e.stopPropagation();
-                if(e.type === 'touchend') e.preventDefault();
+            // Helper for buttons
+            const bindBtn = (id, callback) => {
+                const el = document.getElementById(id);
+                const handler = (e) => {
+                    e.stopPropagation();
+                    if(e.type === 'touchend') e.preventDefault();
+                    callback(el);
+                };
+                el.onclick = handler;
+                el.ontouchend = handler;
+            };
+
+            bindBtn('btn-toggle-fps', (el) => {
                 STATE.showFPS = !STATE.showFPS;
                 document.getElementById('fps-counter').style.display = STATE.showFPS ? 'block' : 'none';
-                btnFps.innerText = `Show FPS: ${STATE.showFPS ? 'ON' : 'OFF'}`;
-                btnFps.classList.toggle('active');
-            };
-            btnFps.onclick = toggleFps;
-            btnFps.ontouchend = toggleFps;
+                el.innerText = `Show FPS: ${STATE.showFPS ? 'ON' : 'OFF'}`;
+                el.classList.toggle('active');
+            });
 
-            const toggleAutoFire = (e) => {
-                e.stopPropagation();
-                if(e.type === 'touchend') e.preventDefault();
+            bindBtn('btn-auto-fire', (el) => {
                 STATE.autoFireMode = (STATE.autoFireMode + 1) % 2;
                 if (STATE.autoFireMode === 0) {
-                    btnAutoFire.innerText = `Auto-Fire: ANY`;
-                    txtAutoFire.innerText = "Fires when right stick is touched.";
+                    el.innerText = `Auto-Fire: ANY`;
+                    document.getElementById('autofire-desc').innerText = "Fires when right stick is touched.";
                 } else {
-                    btnAutoFire.innerText = `Auto-Fire: AIMING`;
-                    txtAutoFire.innerText = "Fires only when aiming.";
+                    el.innerText = `Auto-Fire: AIMING`;
+                    document.getElementById('autofire-desc').innerText = "Fires only when aiming.";
                 }
-            };
-            btnAutoFire.onclick = toggleAutoFire;
-            btnAutoFire.ontouchend = toggleAutoFire;
+            });
 
-            const btnDebug = document.getElementById('btn-toggle-debug');
-            const toggleDebug = (e) => {
-                e.stopPropagation();
-                if(e.type === 'touchend') e.preventDefault();
+            bindBtn('btn-toggle-debug', (el) => {
                 STATE.showDebug = !STATE.showDebug;
                 debug.style.display = STATE.showDebug ? 'block' : 'none';
-                btnCopy.style.display = STATE.showDebug ? 'block' : 'none';
-                btnDebug.innerText = `Show Live Debug: ${STATE.showDebug ? 'ON' : 'OFF'}`;
-                btnDebug.classList.toggle('active');
-            };
-            btnDebug.onclick = toggleDebug;
-            btnDebug.ontouchend = toggleDebug;
+                document.getElementById('btn-copy-log').style.display = STATE.showDebug ? 'block' : 'none';
+                el.innerText = `Show Live Debug: ${STATE.showDebug ? 'ON' : 'OFF'}`;
+                el.classList.toggle('active');
+            });
 
-            const copyLog = (e) => {
-                e.stopPropagation();
-                if(e.type === 'touchend') e.preventDefault();
+            bindBtn('btn-copy-log', () => {
                 navigator.clipboard.writeText(DEBUG_LOG.join('\n')).then(() => log("Copied to clipboard."));
-            };
-            btnCopy.onclick = copyLog;
-            btnCopy.ontouchend = copyLog;
+            });
         }
 
         function gameLoop(timestamp) {
@@ -655,14 +845,26 @@
             STATE.lastTime = timestamp;
             update(dt);
             draw();
+            
+            // PRO FPS COUNTER (Avg + 1% Low)
             if (STATE.showFPS && dt > 0) {
-                const currentFPS = Math.round(1 / dt);
+                const currentFPS = 1 / dt;
                 FPS.buffer.push(currentFPS);
-                if (timestamp - FPS.lastUpdate >= 1000) {
-                    FPS.current = currentFPS;
-                    FPS.min = Math.min(...FPS.buffer); FPS.max = Math.max(...FPS.buffer);
-                    FPS.buffer = []; FPS.lastUpdate = timestamp;
-                    document.getElementById('fps-counter').innerText = `FPS: ${FPS.current} (${FPS.min}-${FPS.max})`;
+                if (FPS.buffer.length > 60) FPS.buffer.shift(); // Keep last 60 frames
+                
+                if (timestamp - FPS.lastUpdate >= 500) { // Update every 500ms
+                    // Calculate Avg
+                    const sum = FPS.buffer.reduce((a, b) => a + b, 0);
+                    const avg = Math.round(sum / FPS.buffer.length);
+                    
+                    // Calculate 1% Low (Worst frames)
+                    const sorted = [...FPS.buffer].sort((a, b) => a - b);
+                    const lowIndex = Math.floor(sorted.length * 0.01);
+                    const low1 = Math.round(sorted[lowIndex] || sorted[0]);
+                    
+                    FPS.display = `FPS: ${avg} (Low: ${low1})`;
+                    FPS.lastUpdate = timestamp;
+                    document.getElementById('fps-counter').innerText = FPS.display;
                 }
             }
             requestAnimationFrame(gameLoop);
