@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TTR v11</title>
+    <title>TTR v12</title>
     <style>
         /* CORE STYLES */
         body {
@@ -22,9 +22,9 @@
             display: block;
         }
 
-        /* UI OVERLAY - Hidden initially for v11 fix */
+        /* UI OVERLAY */
         #ui-layer {
-            display: none; 
+            display: none; /* Hidden until start */
             position: absolute;
             top: 0;
             left: 0;
@@ -34,41 +34,68 @@
         }
 
         .hud-text {
-            position: absolute;
             text-shadow: 1px 1px 2px black;
             font-weight: bold;
             pointer-events: auto;
         }
 
-        #version-display {
+        /* TOP LEFT INFO */
+        #top-left-info {
+            position: absolute;
             top: 10px;
             left: 10px;
-            font-size: 12px;
-            opacity: 0.7;
-        }
-        
-        #fps-counter {
-            top: 60px;
-            right: 10px;
-            text-align: right;
-            font-size: 11px;
-            color: #0f0;
-            opacity: 0.8;
-        }
-
-        #hud-stats {
-            top: 10px;
-            right: 50px;
-            text-align: right;
             display: flex;
-            flex-direction: column;
-            align-items: flex-end;
+            gap: 15px;
+            font-size: 12px;
+            opacity: 0.8;
+            pointer-events: none;
         }
 
-        .heart-row { color: #ff3333; font-size: 20px; letter-spacing: 2px; }
-        .cash-row { color: #4CAF50; font-size: 18px; margin-top: 2px; }
+        #version-display { color: #ccc; }
+        #fps-counter { color: #ccc; }
+
+        /* PLAYER HP BAR (Top Right) */
+        #hud-hp-container {
+            position: absolute;
+            top: 10px;
+            right: 60px; /* Left of pause button */
+            width: 200px;
+            height: 24px;
+            background: #000;
+            border: 2px solid #fff;
+            border-radius: 4px;
+        }
+
+        #hud-hp-fill {
+            width: 100%;
+            height: 100%;
+            background: #00dd00;
+            transition: width 0.2s;
+        }
+
+        #hud-hp-text {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            line-height: 24px;
+            text-align: center;
+            font-size: 14px;
+            color: #fff;
+            text-shadow: 1px 1px 1px #000;
+        }
+
+        #hud-cash {
+            position: absolute;
+            top: 40px;
+            right: 60px;
+            font-size: 18px;
+            color: #4CAF50;
+            text-align: right;
+        }
 
         #pause-btn {
+            position: absolute;
             top: 10px;
             right: 10px;
             cursor: pointer;
@@ -80,6 +107,28 @@
             background: rgba(0,0,0,0.3);
             border-radius: 4px;
             border: 1px solid #fff;
+            pointer-events: auto;
+        }
+
+        /* MANUAL FIRE BUTTON */
+        #btn-manual-fire {
+            display: none; /* Toggled via JS */
+            position: absolute;
+            bottom: 20%;
+            right: 15%;
+            width: 90px;
+            height: 90px;
+            background: rgba(255, 60, 60, 0.4);
+            border: 4px solid rgba(255, 255, 255, 0.6);
+            border-radius: 50%;
+            pointer-events: auto;
+            touch-action: manipulation;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        
+        #btn-manual-fire:active {
+            background: rgba(255, 60, 60, 0.8);
+            transform: scale(0.95);
         }
 
         /* SCREENS */
@@ -194,7 +243,7 @@
     <div id="start-screen" class="fullscreen-modal">
         <h1>Tank Tycoon</h1>
         <button id="btn-start" class="big-btn">TAP TO START</button>
-        <div style="color:#666; margin-top:20px; font-size:12px;">v11</div>
+        <div style="color:#666; margin-top:20px; font-size:12px;">v12</div>
     </div>
 
     <!-- GAME OVER SCREEN -->
@@ -204,13 +253,23 @@
     </div>
 
     <div id="ui-layer">
-        <div id="version-display" class="hud-text">v11</div>
-        <div id="hud-stats" class="hud-text">
-            <div id="hud-hearts" class="heart-row">❤❤❤</div>
-            <div id="hud-cash" class="cash-row">$0</div>
+        <!-- Top Left Group -->
+        <div id="top-left-info" class="hud-text">
+            <span id="version-display">v12</span>
+            <span id="fps-counter">FPS: --</span>
         </div>
-        <div id="fps-counter" class="hud-text">FPS: --</div>
-        <div id="pause-btn" class="hud-text">&#10074;&#10074;</div>
+
+        <!-- Top Right Group -->
+        <div id="hud-hp-container">
+            <div id="hud-hp-fill"></div>
+            <div id="hud-hp-text">3/3</div>
+        </div>
+        <div id="hud-cash" class="hud-text">$0</div>
+        
+        <div id="pause-btn">&#10074;&#10074;</div>
+
+        <!-- Manual Fire Button -->
+        <div id="btn-manual-fire"></div>
 
         <div id="pause-overlay"></div>
 
@@ -229,11 +288,11 @@
 
     <script>
         /** 
-         * TTR ENGINE v11 - HOTFIX
-         * Fixes: Fatal Crash in Spawn Logic (OOB), UI Layering, Pause Menu Logic
+         * TTR ENGINE v12
+         * Features: Camera Smoothing Fix, Water Visuals (Blobs), Manual Fire, Money Bag Death, Audio Overhaul
          */
 
-        const VERSION = "v11";
+        const VERSION = "v12";
 
         // --- CONFIG ---
         const CONFIG = {
@@ -249,7 +308,7 @@
             waterBaseColor: '#4FC3F7',
             gridColor: 'rgba(255, 255, 255, 0.2)',
             joystickDeadzone: 0.2,
-            cameraLerp: 0.1
+            cameraDamping: 10 // Higher = faster tracking
         };
 
         // --- STATE ---
@@ -259,11 +318,12 @@
             lastTime: 0, 
             showFPS: true, 
             showDebug: false,
-            autoFireMode: 0,
+            autoFireMode: 0, // 0: Any, 1: Aiming, 2: Off
             isMobile: false, 
             isPaused: false, 
             audioInitialized: false,
-            wasInWater: false
+            wasInWater: false,
+            manualFirePressed: false
         };
 
         const CAMERA = { x: 0, y: 0 };
@@ -313,12 +373,46 @@
             gainNode.connect(audioCtx.destination);
 
             if (type === 'shoot') {
+                // Player Shoot
                 const osc = audioCtx.createOscillator();
                 osc.type = 'square';
                 osc.frequency.setValueAtTime(400, audioCtx.currentTime);
                 osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
                 gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
                 gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.connect(gainNode);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.1);
+            } else if (type === 'enemy_shoot') {
+                // Heavier
+                const osc = audioCtx.createOscillator();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.15);
+                gainNode.gain.setValueAtTime(0.06, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+                osc.connect(gainNode);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.15);
+            } else if (type === 'hit_enemy') {
+                // Metal Tink
+                const osc = audioCtx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.05);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+                osc.connect(gainNode);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.05);
+            } else if (type === 'hit_player') {
+                // Crunch
+                const osc = audioCtx.createOscillator();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(50, audioCtx.currentTime + 0.1);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1);
                 osc.connect(gainNode);
                 osc.start();
                 osc.stop(audioCtx.currentTime + 0.1);
@@ -393,6 +487,7 @@
             INPUT.keys = {}; INPUT.mouse.down = false;
             INPUT.touches.leftId = null; INPUT.touches.rightId = null;
             INPUT.moveVector = {x:0, y:0}; INPUT.isFiring = false;
+            STATE.manualFirePressed = false;
         }
 
         function resize() {
@@ -414,10 +509,8 @@
                     attempts++;
                     ex = Math.random() * CONFIG.worldSize;
                     ey = Math.random() * CONFIG.worldSize;
-                    // SAFEGUARD: Clamp logic to prevent crash
                     const gx = Math.max(0, Math.min(Math.floor(ex/CONFIG.tileSize), CONFIG.worldTiles - 1));
                     const gy = Math.max(0, Math.min(Math.floor(ey/CONFIG.tileSize), CONFIG.worldTiles - 1));
-                    
                     const dist = Math.hypot(ex-PLAYER.x, ey-PLAYER.y);
                     if (WORLD_MAP[gx][gy] === 0 && dist > 600) safe = true;
                 }
@@ -430,7 +523,6 @@
                     });
                 }
             }
-            log("Enemies Spawned: " + ENEMIES.length);
         }
 
         function generateTerrain() {
@@ -439,7 +531,6 @@
             for (let i=0; i<seeds; i++) {
                 let x = Math.floor(Math.random() * CONFIG.worldTiles);
                 let y = Math.floor(Math.random() * CONFIG.worldTiles);
-                // Safety
                 x = Math.max(0, Math.min(x, CONFIG.worldTiles - 1));
                 y = Math.max(0, Math.min(y, CONFIG.worldTiles - 1));
                 
@@ -481,10 +572,10 @@
             wCtx.fillStyle = wCtx.createPattern(pCan, 'repeat');
             wCtx.fillRect(0, 0, CONFIG.worldSize, CONFIG.worldSize);
 
-            // Water
+            // Water (Blobby Stroke)
             wCtx.lineCap = 'round';
             wCtx.lineJoin = 'round';
-            wCtx.lineWidth = 80; 
+            wCtx.lineWidth = 120; // Increased for roundness
             wCtx.strokeStyle = CONFIG.waterBaseColor;
             
             wCtx.beginPath();
@@ -516,7 +607,7 @@
             wCtx.stroke();
         }
 
-        // --- INPUT & UPDATE ---
+        // --- INPUT ---
         function setupInputs() {
             window.addEventListener('keydown', e => { INPUT.keys[e.key.toLowerCase()] = true; STATE.isMobile = false; });
             window.addEventListener('keyup', e => { INPUT.keys[e.key.toLowerCase()] = false; });
@@ -542,6 +633,7 @@
                     INPUT.touches.rightCurr = { x: t.clientX, y: t.clientY };
                 }
             }
+            updateManualFireButton();
         }
         function handleTouchMove(e) {
             e.preventDefault();
@@ -558,8 +650,16 @@
                     INPUT.moveVector = { x: 0, y: 0 };
                 } else if (t.identifier === INPUT.touches.rightId) {
                     INPUT.touches.rightId = null;
-                    INPUT.isFiring = false;
                 }
+            }
+        }
+
+        function updateManualFireButton() {
+            const btn = document.getElementById('btn-manual-fire');
+            if (STATE.isMobile && STATE.autoFireMode === 2) {
+                btn.style.display = 'block';
+            } else {
+                btn.style.display = 'none';
             }
         }
 
@@ -567,7 +667,7 @@
             if (!STATE.gameStarted || STATE.isPaused || STATE.gameOver) return;
             if (dt > 0.1) dt = 0.1;
 
-            // Player Inputs
+            // --- INPUT ---
             if (STATE.isMobile) {
                 if (INPUT.touches.leftId !== null) {
                     const dx = INPUT.touches.leftCurr.x - INPUT.touches.leftStart.x;
@@ -583,8 +683,13 @@
                     const dy = INPUT.touches.rightCurr.y - INPUT.touches.rightStart.y;
                     const dist = Math.sqrt(dx*dx + dy*dy);
                     if ((dist / 50) > CONFIG.joystickDeadzone) INPUT.aimAngle = Math.atan2(dy, dx);
+                    
+                    // Auto Fire Logic
                     if (STATE.autoFireMode === 0) INPUT.isFiring = true;
-                    else INPUT.isFiring = (dist / 50) > CONFIG.joystickDeadzone;
+                    else if (STATE.autoFireMode === 1) INPUT.isFiring = (dist / 50) > CONFIG.joystickDeadzone;
+                    else INPUT.isFiring = STATE.manualFirePressed;
+                } else {
+                    INPUT.isFiring = STATE.manualFirePressed;
                 }
             } else {
                 INPUT.moveVector = { x: 0, y: 0 };
@@ -603,7 +708,7 @@
             if (INPUT.moveVector.x !== 0 || INPUT.moveVector.y !== 0) PLAYER.bodyAngle = Math.atan2(INPUT.moveVector.y, INPUT.moveVector.x);
             PLAYER.turretAngle = INPUT.aimAngle;
 
-            // Physics with Safety Clamping
+            // Physics
             let currentSpeed = CONFIG.playerSpeed;
             const gx = Math.max(0, Math.min(Math.floor(PLAYER.x / CONFIG.tileSize), CONFIG.worldTiles - 1));
             const gy = Math.max(0, Math.min(Math.floor(PLAYER.y / CONFIG.tileSize), CONFIG.worldTiles - 1));
@@ -627,10 +732,12 @@
             PLAYER.x = Math.max(PLAYER.radius, Math.min(CONFIG.worldSize - PLAYER.radius, PLAYER.x));
             PLAYER.y = Math.max(PLAYER.radius, Math.min(CONFIG.worldSize - PLAYER.radius, PLAYER.y));
             
+            // Camera (Time-Independent Damping for 120Hz Fix)
             const targetCamX = PLAYER.x - canvas.width / 2;
             const targetCamY = PLAYER.y - canvas.height / 2;
-            CAMERA.x += (targetCamX - CAMERA.x) * CONFIG.cameraLerp;
-            CAMERA.y += (targetCamY - CAMERA.y) * CONFIG.cameraLerp;
+            const damp = 1 - Math.exp(-CONFIG.cameraDamping * dt);
+            CAMERA.x += (targetCamX - CAMERA.x) * damp;
+            CAMERA.y += (targetCamY - CAMERA.y) * damp;
 
             if (PLAYER.cooldown > 0) PLAYER.cooldown -= dt;
             if (INPUT.isFiring && PLAYER.cooldown <= 0) {
@@ -638,6 +745,7 @@
                 PLAYER.cooldown = CONFIG.fireRate;
             }
 
+            // Enemies
             for (let i = ENEMIES.length - 1; i >= 0; i--) {
                 let e = ENEMIES[i];
                 let dist = Math.hypot(PLAYER.x - e.x, PLAYER.y - e.y);
@@ -651,6 +759,7 @@
                 }
             }
 
+            // Bullets
             for (let i = BULLETS.length - 1; i >= 0; i--) {
                 const b = BULLETS[i];
                 b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
@@ -659,20 +768,21 @@
                     for (let j = ENEMIES.length - 1; j >= 0; j--) {
                         let e = ENEMIES[j];
                         if (Math.hypot(b.x - e.x, b.y - e.y) < e.radius + 5) {
-                            e.hp--; hit = true;
+                            e.hp--; hit = true; playSound('hit_enemy');
                             if (e.hp <= 0) { dropLoot(e.x, e.y); ENEMIES.splice(j, 1); }
                             break;
                         }
                     }
                 } else if (b.owner === 'enemy') {
                     if (Math.hypot(b.x - PLAYER.x, b.y - PLAYER.y) < PLAYER.radius + 5) {
-                        PLAYER.hp--; updateHUD(); hit = true;
+                        PLAYER.hp--; updateHUD(); hit = true; playSound('hit_player');
                         if (PLAYER.hp <= 0) doGameOver();
                     }
                 }
                 if (b.life <= 0 || hit) BULLETS.splice(i, 1);
             }
 
+            // Loot
             for (let i = LOOT.length - 1; i >= 0; i--) {
                 let l = LOOT[i];
                 if (Math.hypot(PLAYER.x - l.x, PLAYER.y - l.y) < PLAYER.radius + 15) {
@@ -680,11 +790,13 @@
                     if (l.type === 0 && PLAYER.hp < PLAYER.maxHp) PLAYER.hp++;
                     else if (l.type === 1) PLAYER.cash += 1;
                     else if (l.type === 2) PLAYER.cash += 5;
+                    else if (l.type === 3) PLAYER.cash += l.value; // Money Bag
                     updateHUD();
                     LOOT.splice(i, 1);
                 }
             }
 
+            // Particles
             for (let i = PARTICLES.length - 1; i >= 0; i--) {
                 const p = PARTICLES[i];
                 p.life -= dt;
@@ -694,6 +806,8 @@
 
         function fireWeapon(source, type) {
             if (type === 'player') playSound('shoot');
+            else playSound('enemy_shoot');
+            
             const angle = (type === 'player') ? source.turretAngle : source.angle;
             const bX = source.x + Math.cos(angle) * 35;
             const bY = source.y + Math.sin(angle) * 35;
@@ -709,21 +823,34 @@
         function dropLoot(x, y) {
             const rand = Math.random();
             let type = 0;
-            if (rand < 0.33) type = 0; 
-            else if (rand < 0.66) type = 2; 
-            else type = 1; 
+            // Full HP Logic
+            if (PLAYER.hp === PLAYER.maxHp) {
+                if (rand < 0.49) type = 2; // $5
+                else type = 1; // $1
+            } else {
+                if (rand < 0.33) type = 0; // Heart
+                else if (rand < 0.66) type = 2; // $5
+                else type = 1; // $1
+            }
             LOOT.push({ x, y, type });
         }
 
         function updateHUD() {
-            let hearts = "";
-            for(let i=0; i<PLAYER.hp; i++) hearts += "❤";
-            document.getElementById('hud-hearts').innerText = hearts;
+            // HP Bar
+            const pct = (PLAYER.hp / PLAYER.maxHp) * 100;
+            document.getElementById('hud-hp-fill').style.width = `${pct}%`;
+            document.getElementById('hud-hp-text').innerText = `${PLAYER.hp}/${PLAYER.maxHp}`;
             document.getElementById('hud-cash').innerText = "$" + PLAYER.cash;
         }
 
         function doGameOver() {
             STATE.gameOver = true;
+            // Drop Money Bag
+            if (PLAYER.cash > 0) {
+                LOOT.push({ x: PLAYER.x, y: PLAYER.y, type: 3, value: PLAYER.cash });
+                PLAYER.cash = 0;
+                updateHUD();
+            }
             document.getElementById('game-over-screen').style.display = 'flex';
         }
 
@@ -752,6 +879,7 @@
                 if (l.type === 0) { ctx.fillStyle = '#ff3333'; ctx.font = "20px Arial"; ctx.fillText("❤", -10, 5); }
                 else if (l.type === 1) { ctx.fillStyle = '#4CAF50'; ctx.fillRect(-8, -12, 16, 24); ctx.fillStyle='white'; ctx.fillText("$1", -10, 5); }
                 else if (l.type === 2) { ctx.fillStyle = '#2E7D32'; ctx.fillRect(-10, -14, 20, 28); ctx.fillStyle='white'; ctx.fillText("$5", -10, 5); }
+                else if (l.type === 3) { ctx.fillStyle = '#FFD700'; ctx.beginPath(); ctx.arc(0,0,15,0,Math.PI*2); ctx.fill(); ctx.fillStyle='black'; ctx.fillText("$", -5, 5); }
                 ctx.restore();
             }
 
@@ -762,8 +890,10 @@
 
             for (let e of ENEMIES) {
                 ctx.save(); ctx.translate(e.x, e.y);
-                ctx.fillStyle = 'red'; ctx.fillRect(-15, -35, 30, 4);
+                // Black bg health bar
+                ctx.fillStyle = '#000'; ctx.fillRect(-15, -35, 30, 4);
                 ctx.fillStyle = '#0f0'; ctx.fillRect(-15, -35, 30 * (e.hp/e.maxHp), 4);
+                
                 ctx.rotate(e.angle);
                 ctx.fillStyle = '#C62828'; ctx.fillRect(-20, -18, 40, 36);
                 ctx.fillStyle = '#8E0000'; ctx.fillRect(-20, -22, 40, 4); ctx.fillRect(-20, 18, 40, 4);
@@ -819,12 +949,22 @@
                 el.addEventListener('click', handler);
             };
 
+            const bindPress = (id, startCb, endCb) => {
+                const el = document.getElementById(id);
+                const start = (e) => { e.preventDefault(); e.stopPropagation(); startCb(); };
+                const end = (e) => { e.preventDefault(); e.stopPropagation(); endCb(); };
+                el.addEventListener('touchstart', start, {passive: false});
+                el.addEventListener('mousedown', start);
+                el.addEventListener('touchend', end, {passive: false});
+                el.addEventListener('mouseup', end);
+            };
+
             bindBtn('btn-start', () => {
                 initAudio();
                 STATE.gameStarted = true;
                 spawnEnemies();
                 document.getElementById('start-screen').style.display = 'none';
-                document.getElementById('ui-layer').style.display = 'block'; // SHOW UI NOW
+                document.getElementById('ui-layer').style.display = 'block';
                 CAMERA.x = PLAYER.x - canvas.width/2;
                 CAMERA.y = PLAYER.y - canvas.height/2;
             });
@@ -853,20 +993,24 @@
 
             bindBtn('btn-toggle-fps', (el) => {
                 STATE.showFPS = !STATE.showFPS;
-                document.getElementById('fps-counter').style.display = STATE.showFPS ? 'block' : 'none';
+                document.getElementById('top-left-info').style.display = STATE.showFPS ? 'flex' : 'none';
                 el.innerText = `Show FPS: ${STATE.showFPS ? 'ON' : 'OFF'}`;
                 el.classList.toggle('active');
             });
 
             bindBtn('btn-auto-fire', (el) => {
-                STATE.autoFireMode = (STATE.autoFireMode + 1) % 2;
+                STATE.autoFireMode = (STATE.autoFireMode + 1) % 3;
                 if (STATE.autoFireMode === 0) {
                     el.innerText = `Auto-Fire: ANY`;
                     document.getElementById('autofire-desc').innerText = "Fires when right stick is touched.";
-                } else {
+                } else if (STATE.autoFireMode === 1) {
                     el.innerText = `Auto-Fire: AIMING`;
                     document.getElementById('autofire-desc').innerText = "Fires only when aiming.";
+                } else {
+                    el.innerText = `Auto-Fire: OFF`;
+                    document.getElementById('autofire-desc').innerText = "Use dedicated fire button.";
                 }
+                updateManualFireButton();
             });
 
             bindBtn('btn-toggle-debug', (el) => {
@@ -880,6 +1024,11 @@
             bindBtn('btn-copy-log', () => {
                 navigator.clipboard.writeText(DEBUG_LOG.join('\n')).then(() => log("Copied."));
             });
+
+            bindPress('btn-manual-fire', 
+                () => { STATE.manualFirePressed = true; }, 
+                () => { STATE.manualFirePressed = false; }
+            );
         }
 
         function gameLoop(timestamp) {
@@ -906,13 +1055,6 @@
             }
             requestAnimationFrame(gameLoop);
         }
-
-        const togglePause = (pause) => {
-            STATE.isPaused = pause;
-            document.getElementById('pause-modal').style.display = pause ? 'block' : 'none';
-            document.getElementById('pause-overlay').style.display = pause ? 'block' : 'none';
-            if (!pause) STATE.lastTime = performance.now();
-        };
 
         init();
     </script>
