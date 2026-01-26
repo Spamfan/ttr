@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TTR v7</title>
+    <title>TTR v8</title>
     <style>
         /* CORE STYLES */
         body {
@@ -114,9 +114,16 @@
             color: #000;
             font-weight: bold;
         }
+        
+        #autofire-desc {
+            font-size: 11px;
+            color: #aaa;
+            margin-bottom: 10px;
+            font-style: italic;
+        }
 
         #btn-copy-log {
-            display: none; /* Only visible if debug is on */
+            display: none;
         }
         
         /* DEBUG OVERLAY */
@@ -152,7 +159,7 @@
     <canvas id="gameCanvas"></canvas>
 
     <div id="ui-layer">
-        <div id="version-display" class="hud-text">v7</div>
+        <div id="version-display" class="hud-text">v8</div>
         <div id="fps-counter" class="hud-text">FPS: 60</div>
         <div id="pause-btn" class="hud-text">&#10074;&#10074;</div>
 
@@ -161,7 +168,11 @@
         <div id="pause-modal">
             <h3>PAUSED</h3>
             <button id="btn-toggle-fps" class="modal-btn active">Show FPS: ON</button>
-            <button id="btn-auto-fire" class="modal-btn active">Mobile Auto-Fire: ON</button>
+            
+            <!-- Auto Fire Overhaul -->
+            <button id="btn-auto-fire" class="modal-btn active">Auto-Fire: ANY</button>
+            <div id="autofire-desc">Fires when right stick is touched.</div>
+
             <button id="btn-toggle-debug" class="modal-btn">Show Live Debug: OFF</button>
             <button id="btn-copy-log" class="modal-btn">Copy Log</button>
             <button id="btn-close-pause" class="modal-btn" style="background: #800;">RESUME</button>
@@ -172,11 +183,11 @@
 
     <script>
         /** 
-         * TTR ENGINE v7
-         * Major Changes: Smoothing Camera, World Expansion (3200x3200), Steel & Slate Tank, iOS Audio State Logging
+         * TTR ENGINE v8
+         * Changes: Tank Rotation Fix, Camera Smoothing, Border Rendering, Grid Visibility, Auto-Fire Modes, iOS Audio Persistence
          */
 
-        const VERSION = "v7";
+        const VERSION = "v8";
 
         // --- CONFIG ---
         const CONFIG = {
@@ -186,10 +197,10 @@
             bulletSpeed: 700, 
             bulletLife: 1.5,
             grassBaseColor: '#2d4c1e',
-            gridColor: 'rgba(255, 255, 255, 0.07)',
+            gridColor: 'rgba(255, 255, 255, 0.2)', // Increased Opacity (was 0.07)
             gridSize: 64,
             joystickDeadzone: 0.2,
-            cameraLerp: 0.1 // Smoothing factor
+            cameraLerp: 0.1
         };
 
         // --- STATE ---
@@ -197,7 +208,7 @@
             lastTime: 0, 
             showFPS: true, 
             showDebug: false,
-            mobileAutoFire: true,
+            autoFireMode: 0, // 0: Any, 1: Aiming
             isMobile: false, 
             isPaused: false, 
             audioInitialized: false
@@ -228,14 +239,13 @@
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
                 audioCtx = new AudioContext();
                 STATE.audioInitialized = true;
-                log("Audio Context Initialized.");
+                log("Audio Context Created.");
             } catch (e) { log("Error: Audio Context failed."); }
         }
 
         function playShootSound() {
             if (!audioCtx) return;
-            // iOS FINAL BOSS FIX: Log state and force resume
-            log("Fire attempt. State: " + audioCtx.state);
+            // iOS Final Boss Fix: Force Resume if suspended
             if (audioCtx.state !== 'running') {
                 audioCtx.resume();
             }
@@ -253,7 +263,7 @@
                 osc.start();
                 osc.stop(audioCtx.currentTime + 0.1);
             } catch (e) {
-                log("Oscillator Error: " + e.message);
+                // Ignore errors if audio system is busy
             }
         }
 
@@ -269,9 +279,9 @@
 
         const PLAYER = { 
             x: 1600, y: 1600, radius: 20, 
-            color: '#37474F', // Dark Slate Body
-            turretColor: '#546E7A', // Steel Blue Turret
-            barrelColor: '#263238', // Charcoal Barrel
+            color: '#37474F', 
+            turretColor: '#546E7A', 
+            barrelColor: '#263238', 
             treadColor: '#212121', 
             cooldown: 0, bodyAngle: 0, turretAngle: 0 
         };
@@ -291,10 +301,19 @@
             setupInputs();
             setupUI();
             
+            // Persistent Audio Unlocker
             const unlockAudio = () => {
-                initAudio();
-                window.removeEventListener('touchstart', unlockAudio);
-                window.removeEventListener('mousedown', unlockAudio);
+                if (!audioCtx) initAudio();
+                if (audioCtx && audioCtx.state !== 'running') {
+                    audioCtx.resume().then(() => {
+                        log("Audio Resumed (Unlock Success).");
+                        // Only remove listener if success
+                        window.removeEventListener('touchstart', unlockAudio);
+                        window.removeEventListener('mousedown', unlockAudio);
+                    }).catch(e => {
+                        // Keep listener attached to try again next touch
+                    });
+                }
             };
             window.addEventListener('touchstart', unlockAudio);
             window.addEventListener('mousedown', unlockAudio);
@@ -406,10 +425,19 @@
                     const dx = INPUT.touches.rightCurr.x - INPUT.touches.rightStart.x;
                     const dy = INPUT.touches.rightCurr.y - INPUT.touches.rightStart.y;
                     const dist = Math.sqrt(dx*dx + dy*dy);
+                    
                     if ((dist / 50) > CONFIG.joystickDeadzone) {
                         INPUT.aimAngle = Math.atan2(dy, dx);
                     }
-                    INPUT.isFiring = STATE.mobileAutoFire;
+
+                    // Auto-Fire Logic
+                    if (STATE.autoFireMode === 0) {
+                        // Mode 0: Any Touch
+                        INPUT.isFiring = true;
+                    } else {
+                        // Mode 1: Aiming Only (Past deadzone)
+                        INPUT.isFiring = (dist / 50) > CONFIG.joystickDeadzone;
+                    }
                 }
             } else {
                 INPUT.moveVector = { x: 0, y: 0 };
@@ -421,7 +449,6 @@
                     const len = Math.sqrt(INPUT.moveVector.x**2 + INPUT.moveVector.y**2);
                     INPUT.moveVector.x /= len; INPUT.moveVector.y /= len;
                 }
-                // Mouse Aim accounting for Camera
                 INPUT.aimAngle = Math.atan2((INPUT.mouse.y + CAMERA.y) - PLAYER.y, (INPUT.mouse.x + CAMERA.x) - PLAYER.x);
                 INPUT.isFiring = INPUT.mouse.down;
             }
@@ -470,11 +497,22 @@
         }
 
         function draw() {
-            // Background
+            // 1. Clear Screen to Black (The Void)
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
             ctx.save();
-            ctx.translate(-CAMERA.x, -CAMERA.y);
+            // 2. Move Camera (Integer Rounded for smoothness)
+            ctx.translate(Math.round(-CAMERA.x), Math.round(-CAMERA.y));
+
+            // 3. Draw World Background ONLY inside bounds
             ctx.fillStyle = backgroundPattern;
-            ctx.fillRect(CAMERA.x, CAMERA.y, canvas.width, canvas.height);
+            ctx.fillRect(0, 0, CONFIG.worldSize, CONFIG.worldSize);
+            
+            // 4. Draw World Border Line
+            ctx.strokeStyle = '#555';
+            ctx.lineWidth = 5;
+            ctx.strokeRect(0, 0, CONFIG.worldSize, CONFIG.worldSize);
 
             // Bullets
             ctx.strokeStyle = '#ffff00'; ctx.lineWidth = 3; ctx.beginPath();
@@ -488,23 +526,27 @@
             // Tank
             ctx.save();
             ctx.translate(PLAYER.x, PLAYER.y);
-            // Body
+            
+            // Body (Rotated: Width > Height, Treads on Top/Bottom)
             ctx.save();
             ctx.rotate(PLAYER.bodyAngle);
             ctx.fillStyle = PLAYER.color;
-            ctx.fillRect(-18, -20, 36, 40); // Rectangular Body
+            ctx.fillRect(-20, -18, 40, 36); // Main Body (Wide)
             ctx.fillStyle = PLAYER.treadColor;
-            ctx.fillRect(-22, -20, 4, 40); ctx.fillRect(18, -20, 4, 40);
+            ctx.fillRect(-20, -22, 40, 4); // Top Tread
+            ctx.fillRect(-20, 18, 40, 4);  // Bottom Tread
             ctx.restore();
+            
             // Turret
             ctx.save();
             ctx.rotate(PLAYER.turretAngle);
             ctx.fillStyle = PLAYER.barrelColor;
-            ctx.fillRect(0, -4, 35, 8); // Skinnier Barrel
+            ctx.fillRect(0, -4, 35, 8); // Barrel
             ctx.fillStyle = PLAYER.turretColor;
-            ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill(); // Smaller Turret
+            ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill(); // Dome
             ctx.strokeStyle = PLAYER.barrelColor; ctx.lineWidth = 1.5; ctx.stroke();
             ctx.restore();
+            
             ctx.restore();
             ctx.restore(); // End Camera Translation
 
@@ -529,6 +571,8 @@
             const overlay = document.getElementById('pause-overlay');
             const modal = document.getElementById('pause-modal');
             const debug = document.getElementById('debug-overlay');
+            const btnAutoFire = document.getElementById('btn-auto-fire');
+            const txtAutoFire = document.getElementById('autofire-desc');
 
             const togglePause = (pause) => {
                 STATE.isPaused = pause;
@@ -543,41 +587,66 @@
 
             const closeMenu = (e) => { 
                 e.preventDefault(); 
-                e.stopPropagation(); // Stop bubbling
+                e.stopPropagation(); 
                 togglePause(false); 
             };
 
+            // Fix: Add touchend to all UI interactions
             btnPause.onclick = (e) => { e.stopPropagation(); togglePause(true); };
+            btnPause.ontouchend = (e) => { e.preventDefault(); e.stopPropagation(); togglePause(true); };
+            
             btnResume.onclick = closeMenu;
             btnResume.ontouchend = closeMenu;
             overlay.onclick = closeMenu;
             overlay.ontouchend = closeMenu;
 
-            document.getElementById('btn-toggle-fps').onclick = function(e) {
+            const btnFps = document.getElementById('btn-toggle-fps');
+            const toggleFps = (e) => {
                 e.stopPropagation();
+                if(e.type === 'touchend') e.preventDefault();
                 STATE.showFPS = !STATE.showFPS;
                 document.getElementById('fps-counter').style.display = STATE.showFPS ? 'block' : 'none';
-                this.innerText = `Show FPS: ${STATE.showFPS ? 'ON' : 'OFF'}`;
-                this.classList.toggle('active');
+                btnFps.innerText = `Show FPS: ${STATE.showFPS ? 'ON' : 'OFF'}`;
+                btnFps.classList.toggle('active');
             };
-            document.getElementById('btn-auto-fire').onclick = function(e) {
+            btnFps.onclick = toggleFps;
+            btnFps.ontouchend = toggleFps;
+
+            const toggleAutoFire = (e) => {
                 e.stopPropagation();
-                STATE.mobileAutoFire = !STATE.mobileAutoFire;
-                this.innerText = `Mobile Auto-Fire: ${STATE.mobileAutoFire ? 'ON' : 'OFF'}`;
-                this.classList.toggle('active');
+                if(e.type === 'touchend') e.preventDefault();
+                STATE.autoFireMode = (STATE.autoFireMode + 1) % 2;
+                if (STATE.autoFireMode === 0) {
+                    btnAutoFire.innerText = `Auto-Fire: ANY`;
+                    txtAutoFire.innerText = "Fires when right stick is touched.";
+                } else {
+                    btnAutoFire.innerText = `Auto-Fire: AIMING`;
+                    txtAutoFire.innerText = "Fires only when aiming.";
+                }
             };
-            document.getElementById('btn-toggle-debug').onclick = function(e) {
+            btnAutoFire.onclick = toggleAutoFire;
+            btnAutoFire.ontouchend = toggleAutoFire;
+
+            const btnDebug = document.getElementById('btn-toggle-debug');
+            const toggleDebug = (e) => {
                 e.stopPropagation();
+                if(e.type === 'touchend') e.preventDefault();
                 STATE.showDebug = !STATE.showDebug;
                 debug.style.display = STATE.showDebug ? 'block' : 'none';
                 btnCopy.style.display = STATE.showDebug ? 'block' : 'none';
-                this.innerText = `Show Live Debug: ${STATE.showDebug ? 'ON' : 'OFF'}`;
-                this.classList.toggle('active');
+                btnDebug.innerText = `Show Live Debug: ${STATE.showDebug ? 'ON' : 'OFF'}`;
+                btnDebug.classList.toggle('active');
             };
-            btnCopy.onclick = (e) => {
+            btnDebug.onclick = toggleDebug;
+            btnDebug.ontouchend = toggleDebug;
+
+            const copyLog = (e) => {
                 e.stopPropagation();
+                if(e.type === 'touchend') e.preventDefault();
                 navigator.clipboard.writeText(DEBUG_LOG.join('\n')).then(() => log("Copied to clipboard."));
             };
+            btnCopy.onclick = copyLog;
+            btnCopy.ontouchend = copyLog;
         }
 
         function gameLoop(timestamp) {
