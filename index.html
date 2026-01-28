@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TTR v15</title>
+    <title>TTR v16</title>
     <style>
         /* CORE STYLES */
         body {
@@ -160,7 +160,7 @@
         <h1>Tank Tycoon</h1>
         <button id="btn-start" class="big-btn">INITIALIZE</button>
         <div id="loading-bar-container"><div id="loading-bar-fill"></div></div>
-        <div id="loading-text">v15 - Ready</div>
+        <div id="loading-text">v16 - Loading...</div>
     </div>
 
     <!-- GAME OVER SCREEN -->
@@ -171,7 +171,7 @@
 
     <div id="ui-layer">
         <div id="top-left-info">
-            <span id="version-display">v15</span>
+            <span id="version-display">v16</span>
             <span id="fps-counter">FPS: --</span>
         </div>
 
@@ -191,7 +191,6 @@
             <h3 style="color:#ccc; margin-top:0;">SYSTEM PAUSED</h3>
             
             <button id="btn-toggle-fps" class="modal-btn active">Show FPS: ON</button>
-            <button id="btn-toggle-grid" class="modal-btn">Show Grid: OFF</button>
             
             <!-- Controls -->
             <button id="btn-auto-fire" class="modal-btn active">Auto-Fire: ANY</button>
@@ -205,7 +204,10 @@
 
             <button id="btn-toggle-debug" class="modal-btn">Show Live Debug: OFF</button>
             <button id="btn-copy-log" class="modal-btn">Copy Log</button>
-            <button id="btn-clear-data" class="modal-btn" style="border-color:#f00; color:#f88;">Reset Settings</button>
+            
+            <hr style="border-color:#444; margin: 15px 0;">
+            <button id="btn-clear-settings" class="modal-btn" style="border-color:#884444; color:#daa;">Clear Settings</button>
+            <button id="btn-start-over" class="modal-btn" style="border-color:#f00; color:#f88;">Start Over</button>
             
             <button id="btn-close-pause" class="modal-btn" style="background: #500; border-color: #800; margin-top: 20px;">RESUME</button>
         </div>
@@ -215,13 +217,13 @@
 
     <script>
         /** 
-         * TTR ENGINE v15
-         * Features: Fractal Noise Terrain, Static/Tap Controls, Persistence, Passive Income, Aim Line
-         * Fixes: Audio Crash (exponentialRampToValueAtTime), Canvas Read Warning
+         * TTR ENGINE v16
+         * Features: Persistence, Sand Biome, Despeckling, Input State Machine
          */
 
-        const VERSION = "v15";
-        const STORAGE_KEY = "TTR_v15_SETTINGS";
+        const VERSION = "v16";
+        const SETTINGS_KEY = "TTR_SETTINGS";
+        const SAVE_KEY = "TTR_SAVE_DATA";
 
         // --- CONFIG ---
         const CONFIG = {
@@ -229,9 +231,12 @@
             colors: {
                 land: '#4b5320', landNoise: '#3e4418',
                 waterDeep: '#1a262f', waterShallow: '#2b3e4d',
+                sand: '#d2b48c', sandNoise: '#c2a47c',
                 concrete: '#555555', tankBody: '#37474F', tankTurret: '#546E7A', enemyBody: '#8D6E63',
             },
-            playerSpeed: 250, waterSpeedMult: 0.5, 
+            playerSpeed: 250, 
+            waterSpeedMult: 0.3, // 30% speed
+            sandSpeedMult: 0.5, // 50% speed
             fireRate: 1.0, bulletSpeed: 700, bulletLife: 1.5,
             joystickDeadzone: 0.2, cameraDamping: 10
         };
@@ -239,12 +244,16 @@
         // --- STATE ---
         const STATE = {
             gameStarted: false, gameOver: false, lastTime: 0, 
-            showFPS: true, showDebug: false, showGrid: false,
+            showFPS: true, showDebug: false,
             autoFireMode: 0, // 0:Any, 1:Aiming, 2:Off, 3:NotAiming
             staticJoysticks: false,
             tapToFire: false,
+            // Backups for Input State Machine
+            savedAutoFire: 0, savedStatic: false,
+            
             isMobile: false, isPaused: false, audioInitialized: false,
-            wasInWater: false, manualFirePressed: false
+            biome: 0, // 0:Land, 1:Water, 2:Concrete, 3:Sand
+            manualFirePressed: false
         };
 
         const CAMERA = { x: 0, y: 0 };
@@ -252,15 +261,18 @@
         const DEBUG_LOG = [];
 
         // --- WORLD & OBJECTS ---
-        let PHYSICS_MAP = null; 
-        const SHOPS = [
+        let PHYSICS_MAP = null; // 0=Land, 1=Water, 2=Concrete, 3=Sand
+        let SEED = 1;
+        
+        let SHOPS = [
             { id: 'med', type: 'med', x: 1550, y: 1550, w: 60, h: 60, price: 15, unlocked: false, color: '#444', icon: '+' },
             { id: 'cash', type: 'cash', x: 1650, y: 1550, w: 60, h: 60, price: 10, unlocked: false, color: '#444', icon: '$' }
         ];
         let shopTimer = 0;
         let enemySpawnTimer = 0;
+        let saveTimer = 0;
 
-        const PLAYER = { 
+        let PLAYER = { 
             x: 1600, y: 1600, radius: 20, cooldown: 0, bodyAngle: 0, turretAngle: 0,
             hp: 5, maxHp: 5, cash: 0, passiveIncome: 0
         };
@@ -281,36 +293,80 @@
             }
         }
 
+        // --- PRNG (Seeded Random) ---
+        function mulberry32(a) {
+            return function() {
+              var t = a += 0x6D2B79F5;
+              t = Math.imul(t ^ t >>> 15, t | 1);
+              t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+              return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            }
+        }
+        let rng = mulberry32(1); // Default
+
         // --- PERSISTENCE ---
-        function loadSettings() {
+        function loadGame() {
             try {
-                const saved = localStorage.getItem(STORAGE_KEY);
-                if (saved) {
-                    const parsed = JSON.parse(saved);
-                    if (parsed.showFPS !== undefined) STATE.showFPS = parsed.showFPS;
-                    if (parsed.showGrid !== undefined) STATE.showGrid = parsed.showGrid;
-                    if (parsed.autoFireMode !== undefined) STATE.autoFireMode = parsed.autoFireMode;
-                    if (parsed.staticJoysticks !== undefined) STATE.staticJoysticks = parsed.staticJoysticks;
-                    if (parsed.tapToFire !== undefined) STATE.tapToFire = parsed.tapToFire;
-                    log("Settings Loaded.");
+                // Settings
+                const settings = localStorage.getItem(SETTINGS_KEY);
+                if (settings) {
+                    const s = JSON.parse(settings);
+                    if (s.showFPS !== undefined) STATE.showFPS = s.showFPS;
+                    if (s.autoFireMode !== undefined) STATE.autoFireMode = s.autoFireMode;
+                    if (s.staticJoysticks !== undefined) STATE.staticJoysticks = s.staticJoysticks;
+                    if (s.tapToFire !== undefined) STATE.tapToFire = s.tapToFire;
                 }
-            } catch (e) { log("Load Error: " + e); }
+
+                // Game Data
+                const save = localStorage.getItem(SAVE_KEY);
+                if (save) {
+                    const d = JSON.parse(save);
+                    SEED = d.seed;
+                    PLAYER = d.player;
+                    ENEMIES = d.enemies;
+                    LOOT = d.loot;
+                    SHOPS = d.shops;
+                    log("Game Loaded. Seed: " + SEED);
+                } else {
+                    SEED = Math.floor(Math.random() * 1000000);
+                    log("New Game. Seed: " + SEED);
+                }
+                rng = mulberry32(SEED);
+            } catch (e) { log("Load Error: " + e); SEED = Math.floor(Math.random() * 1000000); rng = mulberry32(SEED); }
         }
 
-        function saveSettings() {
+        function saveGame() {
             const data = {
+                seed: SEED,
+                player: PLAYER,
+                enemies: ENEMIES,
+                loot: LOOT,
+                shops: SHOPS
+            };
+            localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+            
+            const settings = {
                 showFPS: STATE.showFPS,
-                showGrid: STATE.showGrid,
                 autoFireMode: STATE.autoFireMode,
                 staticJoysticks: STATE.staticJoysticks,
                 tapToFire: STATE.tapToFire
             };
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+            log("Game Saved.");
         }
 
-        function clearData() {
-            localStorage.removeItem(STORAGE_KEY);
-            location.reload();
+        function startOver() {
+            if (confirm("Are you sure? This will delete your world and progress.")) {
+                localStorage.removeItem(SAVE_KEY);
+                location.reload();
+            }
+        }
+
+        function clearSettings() {
+            if (confirm("Reset settings to default? World data will be kept.")) {
+                localStorage.removeItem(SETTINGS_KEY);
+                location.reload();
+            }
         }
 
         // --- PERLIN NOISE ---
@@ -327,16 +383,22 @@
         // --- INIT ---
         function init() {
             log(`Initializing TTR ${VERSION}`);
-            loadSettings();
+            loadGame();
             resize();
             window.addEventListener('resize', resize);
             
+            // Start Generating Immediately (Async)
+            document.getElementById('loading-bar-container').style.display = 'block';
+            setTimeout(generateWorld, 50);
+
             document.getElementById('btn-start').onclick = () => {
                 initAudio();
-                document.getElementById('btn-start').style.display = 'none';
-                document.getElementById('loading-bar-container').style.display = 'block';
-                document.getElementById('loading-text').innerText = "Generating World...";
-                setTimeout(generateWorld, 100);
+                document.getElementById('start-screen').style.display = 'none';
+                document.getElementById('ui-layer').style.display = 'block';
+                STATE.gameStarted = true;
+                // Snap camera to loaded pos
+                CAMERA.x = PLAYER.x - canvas.width/2;
+                CAMERA.y = PLAYER.y - canvas.height/2;
             };
 
             setupInputs();
@@ -344,18 +406,18 @@
             updateUIState();
 
             window.addEventListener('blur', () => {
-                if (STATE.gameStarted && !STATE.isPaused && !STATE.gameOver) { togglePause(true); resetInputs(); }
+                if (STATE.gameStarted && !STATE.isPaused && !STATE.gameOver) { togglePause(true); resetInputs(); saveGame(); }
             });
         }
 
         // --- GENERATION ---
         function generateWorld() {
             const size = CONFIG.worldSize;
-            PHYSICS_MAP = new Uint8Array(size * size);
+            // Use temporary array for generation
+            const TEMP_MAP = new Uint8Array(size * size);
             worldCanvas = document.createElement('canvas');
             worldCanvas.width = size;
             worldCanvas.height = size;
-            // OPTIMIZATION: willReadFrequently for faster generation
             const wCtx = worldCanvas.getContext('2d', { willReadFrequently: true });
 
             wCtx.fillStyle = CONFIG.colors.land;
@@ -373,38 +435,86 @@
                     if (y + row >= size) break;
                     const cy = y + row;
                     for (let cx = 0; cx < size; cx++) {
-                        const idx = (row * size + cx) * 4;
                         const pIdx = cy * size + cx;
-
+                        
+                        // Use rng() instead of random for consistency
                         let n = Noise.perlin2(cx * noiseScale, cy * noiseScale);
                         n += 0.5 * Noise.perlin2(cx * noiseScale * 3, cy * noiseScale * 3);
 
-                        if (n < -0.25) {
-                            PHYSICS_MAP[pIdx] = 1; // Water
-                            const depth = Math.abs(n);
-                            data[idx] = 26 + (depth * 20);
-                            data[idx+1] = 38 + (depth * 40);
-                            data[idx+2] = 47 + (depth * 60);
-                            data[idx+3] = 255;
-                        } else {
-                            PHYSICS_MAP[pIdx] = 0; // Land
-                            const grit = (Math.random() - 0.5) * 20;
-                            data[idx] = 75 + grit;
-                            data[idx+1] = 83 + grit;
-                            data[idx+2] = 32 + grit;
-                            data[idx+3] = 255;
-                        }
+                        // Thresholds: Water < -0.25 < Sand < -0.15 < Land
+                        if (n < -0.25) TEMP_MAP[pIdx] = 1; // Water
+                        else if (n < -0.15) TEMP_MAP[pIdx] = 3; // Sand
+                        else TEMP_MAP[pIdx] = 0; // Land
                     }
                 }
-                wCtx.putImageData(imgData, 0, y);
+                
                 y += chunkSize;
-                const pct = Math.min(100, Math.round((y / size) * 100));
+                const pct = Math.min(100, Math.round((y / size) * 90)); // 90% gen, 10% despeckle
                 document.getElementById('loading-bar-fill').style.width = pct + "%";
 
                 if (y < size) requestAnimationFrame(processChunk);
-                else finalizeWorld(wCtx);
+                else {
+                    PHYSICS_MAP = TEMP_MAP;
+                    despeckleWorld(wCtx);
+                }
             }
             processChunk();
+        }
+
+        function despeckleWorld(wCtx) {
+            const size = CONFIG.worldSize;
+            const imgData = wCtx.getImageData(0, 0, size, size);
+            const data = imgData.data;
+            
+            // Simple Cellular Automata Pass to remove small specks
+            // We iterate all pixels (expensive but run once)
+            // Optimization: Process in one go, but we'll do it chunked if needed. 
+            // For now, doing it in one block since it's just array access.
+            
+            for (let y = 1; y < size - 1; y++) {
+                for (let x = 1; x < size - 1; x++) {
+                    const idx = y * size + x;
+                    const type = PHYSICS_MAP[idx];
+                    
+                    if (type === 1 || type === 3) { // Water or Sand
+                        let neighbors = 0;
+                        // Check 3x3 grid
+                        for (let dy = -1; dy <= 1; dy++) {
+                            for (let dx = -1; dx <= 1; dx++) {
+                                if (PHYSICS_MAP[(y+dy)*size + (x+dx)] === type) neighbors++;
+                            }
+                        }
+                        if (neighbors < 4) {
+                            PHYSICS_MAP[idx] = 0; // Convert to Land
+                        }
+                    }
+                }
+            }
+
+            // Render Pass based on cleaned map
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const idx = y * size + x;
+                    const type = PHYSICS_MAP[idx];
+                    const pixelIdx = idx * 4;
+                    
+                    if (type === 1) { // Water
+                        data[pixelIdx] = 26; data[pixelIdx+1] = 38; data[pixelIdx+2] = 47;
+                    } else if (type === 3) { // Sand
+                        data[pixelIdx] = 210; data[pixelIdx+1] = 180; data[pixelIdx+2] = 140;
+                        // Noise
+                        const grit = (rng() - 0.5) * 20;
+                        data[pixelIdx] += grit; data[pixelIdx+1] += grit; data[pixelIdx+2] += grit;
+                    } else { // Land
+                        const grit = (rng() - 0.5) * 20;
+                        data[pixelIdx] = 75 + grit; data[pixelIdx+1] = 83 + grit; data[pixelIdx+2] = 32 + grit;
+                    }
+                }
+            }
+
+            wCtx.putImageData(imgData, 0, 0);
+            document.getElementById('loading-bar-fill').style.width = "100%";
+            finalizeWorld(wCtx);
         }
 
         function finalizeWorld(wCtx) {
@@ -421,46 +531,47 @@
 
             const baseImg = wCtx.getImageData(center - baseSize/2, center - baseSize/2, baseSize, baseSize);
             for(let i=0; i<baseImg.data.length; i+=4) {
-                const n = Math.random() * 20;
+                const n = rng() * 20;
                 baseImg.data[i] = 80 + n; baseImg.data[i+1] = 80 + n; baseImg.data[i+2] = 80 + n; baseImg.data[i+3] = 255;
             }
             wCtx.putImageData(baseImg, center - baseSize/2, center - baseSize/2);
 
-            document.getElementById('start-screen').style.display = 'none';
-            document.getElementById('ui-layer').style.display = 'block';
-            STATE.gameStarted = true;
-            spawnEnemies();
-            CAMERA.x = PLAYER.x - canvas.width/2;
-            CAMERA.y = PLAYER.y - canvas.height/2;
-            requestAnimationFrame(gameLoop);
+            document.getElementById('loading-text').innerText = "Ready!";
             log("World Ready.");
         }
 
-        // --- AUDIO (FIXED) ---
+        // --- AUDIO ---
         let audioCtx = null;
         let splashBuffer = null;
+        let sandBuffer = null;
+
         function initAudio() {
             if (STATE.audioInitialized) return;
             try {
                 const AC = window.AudioContext || window.webkitAudioContext;
                 audioCtx = new AC();
                 STATE.audioInitialized = true;
-                createSplashSound();
+                createBuffers();
             } catch (e) {}
         }
-        function createSplashSound() {
+        function createBuffers() {
             if (!audioCtx) return;
-            const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.5, audioCtx.sampleRate);
-            const data = buffer.getChannelData(0);
-            for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i/data.length);
-            splashBuffer = buffer;
+            // Splash
+            let sb = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.5, audioCtx.sampleRate);
+            let d = sb.getChannelData(0);
+            for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i/d.length);
+            splashBuffer = sb;
+            // Sand (Lower pitch noise)
+            let sdb = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.2, audioCtx.sampleRate);
+            let d2 = sdb.getChannelData(0);
+            for (let i = 0; i < d2.length; i++) d2[i] = (Math.random() * 2 - 1) * 0.5;
+            sandBuffer = sdb;
         }
         function playSound(type) {
             if (!audioCtx || audioCtx.state !== 'running') return;
             const gain = audioCtx.createGain(); gain.connect(audioCtx.destination);
             const t = audioCtx.currentTime;
             
-            // FIXED: Used correct method names (exponentialRampToValueAtTime)
             if (type === 'shoot') {
                 const o = audioCtx.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(400, t); 
                 o.frequency.exponentialRampToValueAtTime(100, t+0.1);
@@ -475,6 +586,10 @@
                 const s = audioCtx.createBufferSource(); s.buffer = splashBuffer;
                 const f = audioCtx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 1000;
                 s.connect(f); f.connect(gain); gain.gain.value = 0.2; s.start();
+            } else if (type === 'sand' && sandBuffer) {
+                const s = audioCtx.createBufferSource(); s.buffer = sandBuffer;
+                const f = audioCtx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 400;
+                s.connect(f); f.connect(gain); gain.gain.value = 0.1; s.start();
             } else if (type === 'pickup') {
                 const o = audioCtx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(600, t); 
                 o.frequency.linearRampToValueAtTime(1200, t+0.1);
@@ -487,7 +602,11 @@
         const INPUT = { keys: {}, mouse: { x: 0, y: 0, down: false }, moveVector: { x: 0, y: 0 }, aimAngle: 0, isFiring: false, lastAimTime: 0, touches: { leftId: null, leftStart: {x:0,y:0}, leftCurr: {x:0,y:0}, rightId: null, rightStart: {x:0,y:0}, rightCurr: {x:0,y:0} } };
 
         function setupInputs() {
-            window.addEventListener('keydown', e => { INPUT.keys[e.key.toLowerCase()] = true; STATE.isMobile = false; });
+            window.addEventListener('keydown', e => { 
+                INPUT.keys[e.key.toLowerCase()] = true; 
+                STATE.isMobile = false; 
+                if (e.key === 'Escape') togglePause(!STATE.isPaused);
+            });
             window.addEventListener('keyup', e => { INPUT.keys[e.key.toLowerCase()] = false; });
             window.addEventListener('mousemove', e => { INPUT.mouse.x = e.clientX; INPUT.mouse.y = e.clientY; STATE.isMobile = false; INPUT.lastAimTime = Date.now(); });
             window.addEventListener('mousedown', () => { INPUT.mouse.down = true; STATE.isMobile = false; });
@@ -560,12 +679,6 @@
             if (!STATE.gameStarted) { CAMERA.x = PLAYER.x - canvas.width/2; CAMERA.y = PLAYER.y - canvas.height/2; }
         }
 
-        function isWater(x, y) {
-            if (x < 0 || x >= CONFIG.worldSize || y < 0 || y >= CONFIG.worldSize) return false;
-            const idx = Math.floor(y) * CONFIG.worldSize + Math.floor(x);
-            return PHYSICS_MAP[idx] === 1;
-        }
-
         function spawnEnemies() {
             ENEMIES = [];
             for(let i=0; i<5; i++) spawnEnemy();
@@ -575,12 +688,12 @@
             let safe = false, ex, ey, attempts=0;
             while(!safe && attempts<100) {
                 attempts++;
-                ex = Math.random() * CONFIG.worldSize;
-                ey = Math.random() * CONFIG.worldSize;
+                ex = rng() * CONFIG.worldSize;
+                ey = rng() * CONFIG.worldSize;
                 const idx = Math.max(0, Math.min(Math.floor(ey) * CONFIG.worldSize + Math.floor(ex), PHYSICS_MAP.length-1));
-                if (PHYSICS_MAP[idx] === 0 && Math.hypot(ex-PLAYER.x, ey-PLAYER.y) > 800) safe = true;
+                if (PHYSICS_MAP[idx] !== 1 && Math.hypot(ex-PLAYER.x, ey-PLAYER.y) > 800) safe = true; // Not Water
             }
-            if (safe) ENEMIES.push({ x: ex, y: ey, angle: 0, cooldown: Math.random()*2, hp: 3, maxHp: 3, radius: 20 });
+            if (safe) ENEMIES.push({ x: ex, y: ey, angle: 0, cooldown: rng()*2, hp: 3, maxHp: 3, radius: 20 });
         }
 
         function update(dt) {
@@ -636,14 +749,27 @@
 
             // Physics
             let speed = CONFIG.playerSpeed;
-            if (isWater(PLAYER.x, PLAYER.y)) {
+            const gx = Math.max(0, Math.min(Math.floor(PLAYER.x), CONFIG.worldSize-1));
+            const gy = Math.max(0, Math.min(Math.floor(PLAYER.y), CONFIG.worldSize-1));
+            const biome = PHYSICS_MAP[gy * CONFIG.worldSize + gx];
+            
+            if (biome === 1) { // Water
                 speed *= CONFIG.waterSpeedMult;
                 if (!STATE.wasInWater) playSound('splash');
                 if ((INPUT.moveVector.x !== 0 || INPUT.moveVector.y !== 0) && Math.random() < 0.3) {
                     PARTICLES.push({x: PLAYER.x+(Math.random()-0.5)*20, y: PLAYER.y+(Math.random()-0.5)*20, size: 3+Math.random()*4, life: 0.5, color: '#81D4FA'});
                 }
+                STATE.wasInWater = true;
+            } else if (biome === 3) { // Sand
+                speed *= CONFIG.sandSpeedMult;
+                if ((INPUT.moveVector.x !== 0 || INPUT.moveVector.y !== 0) && Math.random() < 0.2) {
+                    playSound('sand');
+                    PARTICLES.push({x: PLAYER.x+(Math.random()-0.5)*20, y: PLAYER.y+(Math.random()-0.5)*20, size: 3+Math.random()*4, life: 0.5, color: '#d2b48c'});
+                }
+                STATE.wasInWater = false;
+            } else {
+                STATE.wasInWater = false;
             }
-            STATE.wasInWater = isWater(PLAYER.x, PLAYER.y);
 
             PLAYER.x += INPUT.moveVector.x * speed * dt;
             PLAYER.y += INPUT.moveVector.y * speed * dt;
@@ -692,6 +818,8 @@
                 enemySpawnTimer = 0;
                 if (ENEMIES.length < 5) spawnEnemy();
             }
+            saveTimer += dt;
+            if (saveTimer > 10) { saveTimer = 0; saveGame(); }
 
             updateEntities(dt);
         }
@@ -765,15 +893,16 @@
             STATE.gameOver = true;
             if (PLAYER.cash > 0) {
                 LOOT.push({ x: PLAYER.x, y: PLAYER.y, type: 3, value: PLAYER.cash });
-                PLAYER.cash = 0;
-                updateHUD();
+                PLAYER.cash = 0; updateHUD();
             }
+            saveGame(); // Save dead state
             document.getElementById('game-over-screen').style.display = 'flex';
         }
         function respawn() {
             PLAYER.hp = 5; PLAYER.x = 1600; PLAYER.y = 1600; STATE.gameOver = false; BULLETS = []; updateHUD();
             document.getElementById('game-over-screen').style.display = 'none';
             resetInputs(); CAMERA.x = PLAYER.x - canvas.width/2; CAMERA.y = PLAYER.y - canvas.height/2;
+            saveGame();
         }
         function showZoneMsg(msg) {
             const el = document.getElementById('hud-zone-msg'); el.innerText = msg; el.style.opacity = 1;
@@ -788,13 +917,6 @@
             ctx.translate(-CAMERA.x, -CAMERA.y);
             ctx.drawImage(worldCanvas, 0, 0);
 
-            if (STATE.showGrid) {
-                ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1; ctx.beginPath();
-                for (let x = 0; x <= CONFIG.worldSize; x += 64) { ctx.moveTo(x, 0); ctx.lineTo(x, CONFIG.worldSize); }
-                for (let y = 0; y <= CONFIG.worldSize; y += 64) { ctx.moveTo(0, y); ctx.lineTo(CONFIG.worldSize, y); }
-                ctx.stroke();
-            }
-
             for (let s of SHOPS) {
                 if (s.unlocked) { ctx.shadowBlur = 15; ctx.shadowColor = s.id === 'med' ? '#f00' : '#0f0'; }
                 ctx.fillStyle = s.color; ctx.fillRect(s.x, s.y, s.w, s.h);
@@ -806,8 +928,8 @@
             for (let l of LOOT) {
                 ctx.save(); ctx.translate(l.x, l.y); ctx.shadowBlur = 10;
                 if (l.type === 0) { ctx.fillStyle = '#ff3333'; ctx.shadowColor = '#f00'; ctx.font = "24px Arial"; ctx.fillText("❤", -12, 8); }
-                else if (l.type === 1) { ctx.fillStyle = '#81C784'; ctx.shadowColor = '#0f0'; ctx.fillRect(-12, -12, 24, 24); ctx.fillStyle='#000'; ctx.font="12px monospace"; ctx.fillText("$1", -8, 4); }
-                else if (l.type === 2) { ctx.fillStyle = '#4CAF50'; ctx.shadowColor = '#0f0'; ctx.fillRect(-14, -14, 28, 28); ctx.fillStyle='#000'; ctx.font="12px monospace"; ctx.fillText("$5", -8, 4); }
+                else if (l.type === 1) { ctx.fillStyle = '#81C784'; ctx.shadowColor = '#0f0'; ctx.fillRect(-24, -12, 48, 24); ctx.fillStyle='#000'; ctx.font="12px monospace"; ctx.fillText("$1", -8, 4); }
+                else if (l.type === 2) { ctx.fillStyle = '#4CAF50'; ctx.shadowColor = '#0f0'; ctx.fillRect(-28, -14, 56, 28); ctx.fillStyle='#000'; ctx.font="12px monospace"; ctx.fillText("$5", -8, 4); }
                 else if (l.type === 3) { ctx.fillStyle = '#FFD700'; ctx.shadowColor = '#ff0'; ctx.beginPath(); ctx.arc(0,0,15,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#000'; ctx.fillText("$", -5, 5);}
                 ctx.restore();
             }
@@ -887,7 +1009,6 @@
             txtAF.innerText = descAF[STATE.autoFireMode];
             
             updateToggle('btn-toggle-fps', STATE.showFPS, "Show FPS");
-            updateToggle('btn-toggle-grid', STATE.showGrid, "Show Grid");
             updateToggle('btn-static-joy', STATE.staticJoysticks, "Static Joysticks");
             updateToggle('btn-tap-fire', STATE.tapToFire, "Tap to Fire");
             updateManualFireButton();
@@ -919,16 +1040,40 @@
             const closeBg = (e) => { if (e.target === overlay) { e.preventDefault(); togglePause(false); }};
             overlay.addEventListener('touchend', closeBg); overlay.addEventListener('click', closeBg);
 
-            bindBtn('btn-toggle-fps', () => { STATE.showFPS = !STATE.showFPS; document.getElementById('top-left-info').style.display = STATE.showFPS ? 'flex' : 'none'; updateUIState(); saveSettings(); });
-            bindBtn('btn-toggle-grid', () => { STATE.showGrid = !STATE.showGrid; updateUIState(); saveSettings(); });
-            bindBtn('btn-static-joy', () => { STATE.staticJoysticks = !STATE.staticJoysticks; updateUIState(); saveSettings(); });
-            bindBtn('btn-tap-fire', () => { STATE.tapToFire = !STATE.tapToFire; updateUIState(); saveSettings(); });
+            bindBtn('btn-toggle-fps', () => { STATE.showFPS = !STATE.showFPS; document.getElementById('top-left-info').style.display = STATE.showFPS ? 'flex' : 'none'; updateUIState(); saveGame(); });
             
-            bindBtn('btn-auto-fire', () => { STATE.autoFireMode = (STATE.autoFireMode + 1) % 4; updateUIState(); saveSettings(); });
+            // Logic: Tap to Fire overrides others
+            bindBtn('btn-static-joy', () => { 
+                STATE.staticJoysticks = !STATE.staticJoysticks; 
+                if (STATE.tapToFire) STATE.tapToFire = false; // Disable TTF if messing with sticks
+                updateUIState(); saveGame(); 
+            });
+            
+            bindBtn('btn-tap-fire', () => { 
+                STATE.tapToFire = !STATE.tapToFire;
+                if (STATE.tapToFire) {
+                    STATE.savedStatic = STATE.staticJoysticks;
+                    STATE.savedAutoFire = STATE.autoFireMode;
+                    STATE.staticJoysticks = true; // Force Static
+                    STATE.autoFireMode = 2; // Force OFF
+                } else {
+                    STATE.staticJoysticks = STATE.savedStatic;
+                    STATE.autoFireMode = STATE.savedAutoFire;
+                }
+                updateUIState(); saveGame(); 
+            });
+            
+            bindBtn('btn-auto-fire', () => { 
+                STATE.autoFireMode = (STATE.autoFireMode + 1) % 4; 
+                if (STATE.tapToFire) STATE.tapToFire = false; // Disable TTF
+                updateUIState(); saveGame(); 
+            });
             
             bindBtn('btn-toggle-debug', (el) => { STATE.showDebug = !STATE.showDebug; document.getElementById('debug-overlay').style.display = STATE.showDebug ? 'block' : 'none'; document.getElementById('btn-copy-log').style.display = STATE.showDebug ? 'block' : 'none'; el.classList.toggle('active'); });
             bindBtn('btn-copy-log', () => navigator.clipboard.writeText(DEBUG_LOG.join('\n')));
-            bindBtn('btn-clear-data', clearData);
+            
+            bindBtn('btn-start-over', startOver);
+            bindBtn('btn-clear-settings', clearSettings);
             
             bindPress('btn-manual-fire', () => STATE.manualFirePressed = true, () => STATE.manualFirePressed = false);
         }
