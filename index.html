@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TTR v18</title>
+    <title>TTR v19</title>
+    <link rel="icon" href="data:,"> <!-- Fixes 404 Favicon Error -->
     <style>
         /* CORE STYLES */
         body {
@@ -171,7 +172,7 @@
 
     <div id="ui-layer">
         <div id="top-left-info">
-            <span id="version-display">v18</span>
+            <span id="version-display">v19</span>
             <span id="fps-counter">FPS: --</span>
         </div>
 
@@ -217,8 +218,8 @@
 
     <script>
         /** 
-         * TTR ENGINE v18
-         * Fixes: Double Binding Crash, Spawn Safety, Alert Reporter
+         * TTR ENGINE v19
+         * Fixes: ReferenceError Crash (Hoisting), Favicon 404, Init Safety
          */
 
         // --- CONSOLE BRIDGE ---
@@ -255,7 +256,7 @@
         window.onerror = function(msg, url, line) {
             const err = `FATAL: ${msg} (Line ${line})`;
             console.error(err);
-            alert("GAME CRASHED:\n" + err); // System Alert fallback
+            alert("GAME CRASHED:\n" + err); 
             return false;
         };
 
@@ -263,8 +264,8 @@
             console.error(`PROMISE FAIL: ${event.reason}`);
         };
 
-        // --- CONFIG ---
-        const VERSION = "v18";
+        // --- CONFIG & CONSTANTS ---
+        const VERSION = "v19";
         const SETTINGS_KEY = "TTR_SETTINGS";
         const SAVE_KEY = "TTR_SAVE_DATA";
 
@@ -317,7 +318,27 @@
         const ctx = canvas.getContext('2d', { alpha: false });
         let worldCanvas = null;
 
-        // --- PRNG ---
+        // --- UTILITIES (DEFINED FIRST) ---
+        function log(msg) {
+            console.log(msg);
+        }
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            if (!STATE.gameStarted) {
+                CAMERA.x = PLAYER.x - canvas.width/2;
+                CAMERA.y = PLAYER.y - canvas.height/2;
+            }
+        }
+
+        function resetInputs() {
+            INPUT.keys = {}; INPUT.mouse.down = false; 
+            INPUT.touches.leftId = null; INPUT.touches.rightId = null; 
+            INPUT.moveVector = {x:0,y:0}; INPUT.isFiring = false; 
+            STATE.manualFirePressed = false;
+        }
+
         function mulberry32(a) {
             return function() {
               var t = a += 0x6D2B79F5;
@@ -327,177 +348,6 @@
             }
         }
         let rng = mulberry32(1);
-
-        // --- INIT ---
-        function init() {
-            console.log(`Initializing TTR ${VERSION}`);
-            loadGame();
-            resize();
-            window.addEventListener('resize', resize);
-            
-            // Start Generating Immediately (Invisible Load)
-            setTimeout(generateWorld, 50);
-
-            // Bind Initialize Button (Single Source of Truth)
-            document.getElementById('btn-start').onclick = () => {
-                initAudio();
-                if (STATE.worldReady) {
-                    startGame();
-                } else {
-                    // Show Loading UI if not ready
-                    STATE.startOnLoad = true;
-                    document.getElementById('btn-start').style.display = 'none';
-                    document.getElementById('loading-bar-container').style.display = 'block';
-                    document.getElementById('loading-text').style.visibility = 'visible';
-                }
-            };
-
-            setupInputs();
-            setupUI();
-            updateUIState();
-
-            window.addEventListener('blur', () => {
-                if (STATE.gameStarted && !STATE.isPaused && !STATE.gameOver) { togglePause(true); resetInputs(); saveGame(); }
-            });
-        }
-
-        function startGame() {
-            document.getElementById('start-screen').style.display = 'none';
-            document.getElementById('ui-layer').style.display = 'block';
-            STATE.gameStarted = true;
-            // Snap camera
-            CAMERA.x = PLAYER.x - canvas.width/2;
-            CAMERA.y = PLAYER.y - canvas.height/2;
-            
-            // Initial Spawn check
-            if (ENEMIES.length < 5) spawnEnemies();
-
-            // Start Loop
-            STATE.lastTime = performance.now();
-            requestAnimationFrame(gameLoop);
-            console.log("Game Loop Started");
-        }
-
-        // --- GENERATION ---
-        function generateWorld() {
-            const size = CONFIG.worldSize;
-            const TEMP_MAP = new Uint8Array(size * size);
-            worldCanvas = document.createElement('canvas');
-            worldCanvas.width = size;
-            worldCanvas.height = size;
-            const wCtx = worldCanvas.getContext('2d', { willReadFrequently: true });
-
-            wCtx.fillStyle = CONFIG.colors.land;
-            wCtx.fillRect(0, 0, size, size);
-
-            const noiseScale = 0.003;
-            const chunkSize = 100;
-            let y = 0;
-
-            function processChunk() {
-                const imgData = wCtx.getImageData(0, y, size, chunkSize);
-                const data = imgData.data;
-
-                for (let row = 0; row < chunkSize; row++) {
-                    if (y + row >= size) break;
-                    const cy = y + row;
-                    for (let cx = 0; cx < size; cx++) {
-                        const pIdx = cy * size + cx;
-                        let n = Noise.perlin2(cx * noiseScale, cy * noiseScale);
-                        n += 0.5 * Noise.perlin2(cx * noiseScale * 3, cy * noiseScale * 3);
-
-                        if (n < -0.25) TEMP_MAP[pIdx] = 1; // Water
-                        else if (n < -0.15) TEMP_MAP[pIdx] = 3; // Sand
-                        else TEMP_MAP[pIdx] = 0; // Land
-                    }
-                }
-                
-                y += chunkSize;
-                const pct = Math.min(100, Math.round((y / size) * 90));
-                document.getElementById('loading-bar-fill').style.width = pct + "%";
-
-                if (y < size) requestAnimationFrame(processChunk);
-                else {
-                    PHYSICS_MAP = TEMP_MAP;
-                    despeckleWorld(wCtx);
-                }
-            }
-            processChunk();
-        }
-
-        function despeckleWorld(wCtx) {
-            const size = CONFIG.worldSize;
-            const imgData = wCtx.getImageData(0, 0, size, size);
-            const data = imgData.data;
-            
-            // Cellular Automata Pass to remove specks
-            for (let y = 1; y < size - 1; y++) {
-                for (let x = 1; x < size - 1; x++) {
-                    const idx = y * size + x;
-                    const type = PHYSICS_MAP[idx];
-                    if (type === 1 || type === 3) {
-                        let neighbors = 0;
-                        for (let dy = -1; dy <= 1; dy++) {
-                            for (let dx = -1; dx <= 1; dx++) {
-                                if (PHYSICS_MAP[(y+dy)*size + (x+dx)] === type) neighbors++;
-                            }
-                        }
-                        if (neighbors < 4) PHYSICS_MAP[idx] = 0;
-                    }
-                }
-            }
-
-            // Render Pass
-            for (let y = 0; y < size; y++) {
-                for (let x = 0; x < size; x++) {
-                    const idx = y * size + x;
-                    const type = PHYSICS_MAP[idx];
-                    const pixelIdx = idx * 4;
-                    
-                    if (type === 1) { // Water
-                        data[pixelIdx] = 26; data[pixelIdx+1] = 38; data[pixelIdx+2] = 47;
-                    } else if (type === 3) { // Sand
-                        data[pixelIdx] = 210; data[pixelIdx+1] = 180; data[pixelIdx+2] = 140;
-                        const grit = (rng() - 0.5) * 20;
-                        data[pixelIdx] += grit; data[pixelIdx+1] += grit; data[pixelIdx+2] += grit;
-                    } else { // Land
-                        const grit = (rng() - 0.5) * 20;
-                        data[pixelIdx] = 75 + grit; data[pixelIdx+1] = 83 + grit; data[pixelIdx+2] = 32 + grit;
-                    }
-                }
-            }
-
-            wCtx.putImageData(imgData, 0, 0);
-            document.getElementById('loading-bar-fill').style.width = "100%";
-            finalizeWorld(wCtx);
-        }
-
-        function finalizeWorld(wCtx) {
-            const center = CONFIG.worldSize / 2;
-            const baseSize = 300;
-            wCtx.fillStyle = '#555';
-            wCtx.fillRect(center - baseSize/2, center - baseSize/2, baseSize, baseSize);
-            
-            for(let by = center - baseSize/2; by < center + baseSize/2; by++) {
-                for(let bx = center - baseSize/2; bx < center + baseSize/2; bx++) {
-                    PHYSICS_MAP[Math.floor(by)*CONFIG.worldSize + Math.floor(bx)] = 2;
-                }
-            }
-
-            const baseImg = wCtx.getImageData(center - baseSize/2, center - baseSize/2, baseSize, baseSize);
-            for(let i=0; i<baseImg.data.length; i+=4) {
-                const n = rng() * 20;
-                baseImg.data[i] = 80 + n; baseImg.data[i+1] = 80 + n; baseImg.data[i+2] = 80 + n; baseImg.data[i+3] = 255;
-            }
-            wCtx.putImageData(baseImg, center - baseSize/2, center - baseSize/2);
-
-            console.log("World Generation Finished.");
-            STATE.worldReady = true;
-            
-            if (STATE.startOnLoad) {
-                startGame();
-            }
-        }
 
         // --- AUDIO ---
         let audioCtx = null;
@@ -555,7 +405,144 @@
             }
         }
 
+        // --- WORLD GENERATION ---
+        function generateWorld() {
+            const size = CONFIG.worldSize;
+            const TEMP_MAP = new Uint8Array(size * size);
+            worldCanvas = document.createElement('canvas');
+            worldCanvas.width = size;
+            worldCanvas.height = size;
+            const wCtx = worldCanvas.getContext('2d', { willReadFrequently: true });
+
+            wCtx.fillStyle = CONFIG.colors.land;
+            wCtx.fillRect(0, 0, size, size);
+
+            const noiseScale = 0.003;
+            const chunkSize = 100;
+            let y = 0;
+
+            function processChunk() {
+                const imgData = wCtx.getImageData(0, y, size, chunkSize);
+                const data = imgData.data;
+
+                for (let row = 0; row < chunkSize; row++) {
+                    if (y + row >= size) break;
+                    const cy = y + row;
+                    for (let cx = 0; cx < size; cx++) {
+                        const pIdx = cy * size + cx;
+                        let n = Noise.perlin2(cx * noiseScale, cy * noiseScale);
+                        n += 0.5 * Noise.perlin2(cx * noiseScale * 3, cy * noiseScale * 3);
+
+                        if (n < -0.25) TEMP_MAP[pIdx] = 1; // Water
+                        else if (n < -0.15) TEMP_MAP[pIdx] = 3; // Sand
+                        else TEMP_MAP[pIdx] = 0; // Land
+                    }
+                }
+                
+                y += chunkSize;
+                const pct = Math.min(100, Math.round((y / size) * 90));
+                document.getElementById('loading-bar-fill').style.width = pct + "%";
+
+                if (y < size) requestAnimationFrame(processChunk);
+                else {
+                    PHYSICS_MAP = TEMP_MAP;
+                    despeckleWorld(wCtx);
+                }
+            }
+            processChunk();
+        }
+
+        function despeckleWorld(wCtx) {
+            const size = CONFIG.worldSize;
+            const imgData = wCtx.getImageData(0, 0, size, size);
+            const data = imgData.data;
+            
+            for (let y = 1; y < size - 1; y++) {
+                for (let x = 1; x < size - 1; x++) {
+                    const idx = y * size + x;
+                    const type = PHYSICS_MAP[idx];
+                    if (type === 1 || type === 3) {
+                        let neighbors = 0;
+                        for (let dy = -1; dy <= 1; dy++) {
+                            for (let dx = -1; dx <= 1; dx++) {
+                                if (PHYSICS_MAP[(y+dy)*size + (x+dx)] === type) neighbors++;
+                            }
+                        }
+                        if (neighbors < 4) PHYSICS_MAP[idx] = 0;
+                    }
+                }
+            }
+
+            for (let y = 0; y < size; y++) {
+                for (let x = 0; x < size; x++) {
+                    const idx = y * size + x;
+                    const type = PHYSICS_MAP[idx];
+                    const pixelIdx = idx * 4;
+                    
+                    if (type === 1) { // Water
+                        data[pixelIdx] = 26; data[pixelIdx+1] = 38; data[pixelIdx+2] = 47;
+                    } else if (type === 3) { // Sand
+                        data[pixelIdx] = 210; data[pixelIdx+1] = 180; data[pixelIdx+2] = 140;
+                        const grit = (rng() - 0.5) * 20;
+                        data[pixelIdx] += grit; data[pixelIdx+1] += grit; data[pixelIdx+2] += grit;
+                    } else { // Land
+                        const grit = (rng() - 0.5) * 20;
+                        data[pixelIdx] = 75 + grit; data[pixelIdx+1] = 83 + grit; data[pixelIdx+2] = 32 + grit;
+                    }
+                }
+            }
+
+            wCtx.putImageData(imgData, 0, 0);
+            document.getElementById('loading-bar-fill').style.width = "100%";
+            finalizeWorld(wCtx);
+        }
+
+        function finalizeWorld(wCtx) {
+            const center = CONFIG.worldSize / 2;
+            const baseSize = 300;
+            wCtx.fillStyle = '#555';
+            wCtx.fillRect(center - baseSize/2, center - baseSize/2, baseSize, baseSize);
+            
+            for(let by = center - baseSize/2; by < center + baseSize/2; by++) {
+                for(let bx = center - baseSize/2; bx < center + baseSize/2; bx++) {
+                    PHYSICS_MAP[Math.floor(by)*CONFIG.worldSize + Math.floor(bx)] = 2;
+                }
+            }
+
+            const baseImg = wCtx.getImageData(center - baseSize/2, center - baseSize/2, baseSize, baseSize);
+            for(let i=0; i<baseImg.data.length; i+=4) {
+                const n = rng() * 20;
+                baseImg.data[i] = 80 + n; baseImg.data[i+1] = 80 + n; baseImg.data[i+2] = 80 + n; baseImg.data[i+3] = 255;
+            }
+            wCtx.putImageData(baseImg, center - baseSize/2, center - baseSize/2);
+
+            console.log("World Generation Finished.");
+            STATE.worldReady = true;
+            
+            if (STATE.startOnLoad) {
+                startGame();
+            } else {
+                document.getElementById('loading-bar-container').style.display = 'none';
+                document.getElementById('loading-text').style.visibility = 'hidden';
+                document.getElementById('btn-start').style.display = 'block'; // Ensure button is back
+            }
+        }
+
         // --- GAME LOGIC ---
+        function startGame() {
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('ui-layer').style.display = 'block';
+            STATE.gameStarted = true;
+            CAMERA.x = PLAYER.x - canvas.width/2;
+            CAMERA.y = PLAYER.y - canvas.height/2;
+            
+            if (ENEMIES.length < 5) spawnEnemies();
+
+            STATE.lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
+            console.log("Game Loop Started");
+        }
+
         function loadSettings() {
             try {
                 const saved = localStorage.getItem(SETTINGS_KEY);
@@ -611,7 +598,6 @@
         }
 
         function spawnEnemies() {
-            // Safety Guard: Don't spawn if map isn't ready
             if (!PHYSICS_MAP) return;
             ENEMIES = [];
             for(let i=0; i<5; i++) spawnEnemy();
@@ -631,17 +617,14 @@
         }
 
         function update(dt) {
-            // ENGINE HARDENING: Guard Clauses
             if (!STATE.gameStarted || STATE.isPaused || STATE.gameOver) return;
             if (!PHYSICS_MAP || !worldCanvas) return;
             
             if (dt > 0.1) dt = 0.1;
 
-            // ... (Input & Physics Logic same as v16) ...
             handleInput(dt);
             handlePhysics(dt);
             
-            // Shops & Save
             shopTimer += dt;
             if (PLAYER.passiveIncome > 0) PLAYER.cash += PLAYER.passiveIncome * dt;
             if (shopTimer >= 0.2) {
@@ -674,12 +657,10 @@
                     const dx = curr.x - start.x, dy = curr.y - start.y;
                     const dist = Math.sqrt(dx*dx + dy*dy);
                     const isMoved = (dist / 50) > CONFIG.joystickDeadzone;
-                    
                     if (isMoved) {
                         INPUT.aimAngle = Math.atan2(dy, dx);
                         INPUT.lastAimTime = Date.now();
                     }
-
                     if (STATE.autoFireMode === 0) INPUT.isFiring = true;
                     else if (STATE.autoFireMode === 1) INPUT.isFiring = isMoved;
                     else if (STATE.autoFireMode === 3) INPUT.isFiring = !isMoved;
@@ -700,7 +681,6 @@
                 INPUT.aimAngle = Math.atan2((INPUT.mouse.y + CAMERA.y) - PLAYER.y, (INPUT.mouse.x + CAMERA.x) - PLAYER.x);
                 INPUT.isFiring = INPUT.mouse.down;
             }
-
             if (INPUT.moveVector.x !== 0 || INPUT.moveVector.y !== 0) PLAYER.bodyAngle = Math.atan2(INPUT.moveVector.y, INPUT.moveVector.x);
             PLAYER.turretAngle = INPUT.aimAngle;
         }
@@ -743,8 +723,6 @@
             }
         }
 
-        // ... [Helper functions: checkShops, updateEntities, fireWeapon, dropLoot, updateHUD, doGameOver, respawn, showZoneMsg, draw, drawTank, lighten, drawJoystick, setupUI, setupInputs, updateUIState, updateManualFireButton, resetInputs, handleTouchStart/Move/End] ...
-        
         function checkShops() {
             let onShop = false;
             for (let s of SHOPS) {
@@ -831,12 +809,9 @@
         }
         function doGameOver() {
             STATE.gameOver = true;
-            if (PLAYER.cash > 0) {
-                LOOT.push({ x: PLAYER.x, y: PLAYER.y, type: 3, value: PLAYER.cash });
-                PLAYER.cash = 0; updateHUD();
-            }
-            saveGame();
+            if (PLAYER.cash > 0) { LOOT.push({ x: PLAYER.x, y: PLAYER.y, type: 3, value: PLAYER.cash }); PLAYER.cash = 0; updateHUD(); }
             document.getElementById('game-over-screen').style.display = 'flex';
+            saveGame();
         }
         function respawn() {
             PLAYER.hp = 5; PLAYER.x = 1600; PLAYER.y = 1600; STATE.gameOver = false; BULLETS = []; updateHUD();
@@ -848,6 +823,7 @@
             const el = document.getElementById('hud-zone-msg'); el.innerText = msg; el.style.opacity = 1;
         }
 
+        // --- DRAW ---
         function draw() {
             if (!worldCanvas) return;
 
@@ -938,18 +914,111 @@
             ctx.beginPath(); ctx.arc(curr.x, curr.y, 25, 0, Math.PI*2); ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fill();
         }
 
-        // --- PERLIN NOISE IMPLEMENTATION ---
-        const Noise = (function() {
-            const p = new Uint8Array(512);
-            const permutation = [151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,190,6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,125,136,171,168,68,175,74,165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,102,143,54,65,25,63,161,1,216,80,73,209,76,132,187,208,89,18,169,200,196,135,130,116,188,159,86,164,100,109,198,173,186,3,64,52,217,226,250,124,123,5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,223,183,170,213,119,248,152,2,44,154,163,70,221,153,101,155,167,43,172,9,129,22,39,253,19,98,108,110,79,113,224,232,178,185,112,104,218,246,97,228,251,34,242,193,238,210,144,12,191,179,162,241,81,51,145,235,249,14,239,107,49,192,214,31,181,199,106,157,184,84,204,176,115,121,50,45,127,4,150,254,138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180];
-            for (let i=0; i < 256 ; i++) p[256+i] = p[i] = permutation[i];
-            function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
-            function lerp(t, a, b) { return a + t * (b - a); }
-            function grad(hash, x, y, z) { const h = hash & 15; const u = h<8 ? x : y, v = h<4 ? y : h==12||h==14 ? x : z; return ((h&1) == 0 ? u : -u) + ((h&2) == 0 ? v : -v); }
-            return { perlin2: function(x, y) { const X = Math.floor(x) & 255, Y = Math.floor(y) & 255; x -= Math.floor(x); y -= Math.floor(y); const u = fade(x), v = fade(y); const A = p[X]+Y, AA = p[A], AB = p[A+1], B = p[X+1]+Y, BA = p[B], BB = p[B+1]; return lerp(v, lerp(u, grad(p[AA], x, y, 0), grad(p[BA], x-1, y, 0)), lerp(u, grad(p[AB], x, y-1, 0), grad(p[BB], x-1, y-1, 0))); } };
-        })();
+        function setupUI() {
+            const bindBtn = (id, cb) => {
+                const el = document.getElementById(id);
+                const h = (e) => { e.preventDefault(); e.stopPropagation(); cb(el); return false; };
+                el.addEventListener('touchend', h, {passive:false}); el.addEventListener('click', h);
+            };
+            const bindPress = (id, start, end) => {
+                const el = document.getElementById(id);
+                const s = (e) => { e.preventDefault(); e.stopPropagation(); start(); };
+                const f = (e) => { e.preventDefault(); e.stopPropagation(); end(); };
+                el.addEventListener('touchstart', s, {passive:false}); el.addEventListener('mousedown', s);
+                el.addEventListener('touchend', f, {passive:false}); el.addEventListener('mouseup', f);
+            };
 
-        init();
+            bindBtn('btn-respawn', respawn);
+            bindBtn('pause-btn', () => togglePause(true));
+            bindBtn('btn-close-pause', () => togglePause(false));
+            const overlay = document.getElementById('pause-overlay');
+            const closeBg = (e) => { if (e.target === overlay) { e.preventDefault(); togglePause(false); }};
+            overlay.addEventListener('touchend', closeBg); overlay.addEventListener('click', closeBg);
+
+            bindBtn('btn-toggle-fps', () => { STATE.showFPS = !STATE.showFPS; document.getElementById('top-left-info').style.display = STATE.showFPS ? 'flex' : 'none'; updateUIState(); saveGame(); });
+            
+            bindBtn('btn-static-joy', () => { 
+                STATE.staticJoysticks = !STATE.staticJoysticks; 
+                if (STATE.tapToFire) STATE.tapToFire = false; 
+                updateUIState(); saveGame(); 
+            });
+            
+            bindBtn('btn-tap-fire', () => { 
+                STATE.tapToFire = !STATE.tapToFire;
+                if (STATE.tapToFire) {
+                    STATE.savedStatic = STATE.staticJoysticks;
+                    STATE.savedAutoFire = STATE.autoFireMode;
+                    STATE.staticJoysticks = true; 
+                    STATE.autoFireMode = 2; 
+                } else {
+                    STATE.staticJoysticks = STATE.savedStatic;
+                    STATE.autoFireMode = STATE.savedAutoFire;
+                }
+                updateUIState(); saveGame(); 
+            });
+            
+            bindBtn('btn-auto-fire', () => { 
+                STATE.autoFireMode = (STATE.autoFireMode + 1) % 4; 
+                if (STATE.tapToFire) STATE.tapToFire = false; 
+                updateUIState(); saveGame(); 
+            });
+            
+            bindBtn('btn-toggle-debug', (el) => { STATE.showDebug = !STATE.showDebug; document.getElementById('debug-overlay').style.display = STATE.showDebug ? 'block' : 'none'; document.getElementById('btn-copy-log').style.display = STATE.showDebug ? 'block' : 'none'; el.classList.toggle('active'); });
+            bindBtn('btn-copy-log', () => navigator.clipboard.writeText(DEBUG_LOG.join('\n')));
+            bindBtn('btn-start-over', startOver);
+            bindBtn('btn-clear-settings', clearSettings);
+            
+            bindPress('btn-manual-fire', () => STATE.manualFirePressed = true, () => STATE.manualFirePressed = false);
+        }
+
+        function updateUIState() {
+            const mapAF = ["ANY", "AIMING", "OFF", "NOT AIMING"];
+            const descAF = ["Fires on touch.", "Fires when aiming.", "Use fire button.", "Fires when stick touched inside deadzone."];
+            const btnAF = document.getElementById('btn-auto-fire');
+            const txtAF = document.getElementById('autofire-desc');
+            btnAF.innerText = `Auto-Fire: ${mapAF[STATE.autoFireMode]}`;
+            txtAF.innerText = descAF[STATE.autoFireMode];
+            
+            updateToggle('btn-toggle-fps', STATE.showFPS, "Show FPS");
+            updateToggle('btn-static-joy', STATE.staticJoysticks, "Static Joysticks");
+            updateToggle('btn-tap-fire', STATE.tapToFire, "Tap to Fire");
+            updateManualFireButton();
+        }
+        function updateToggle(id, val, text) {
+            const el = document.getElementById(id);
+            el.innerText = `${text}: ${val ? 'ON' : 'OFF'}`;
+            el.classList.toggle('active', val);
+        }
+
+        function togglePause(pause) {
+            STATE.isPaused = pause;
+            document.getElementById('pause-modal').style.display = pause ? 'block' : 'none';
+            document.getElementById('pause-overlay').style.display = pause ? 'block' : 'none';
+            if (!pause) STATE.lastTime = performance.now();
+        }
+
+        function gameLoop(timestamp) {
+            if (!STATE.lastTime) STATE.lastTime = timestamp;
+            const dt = (timestamp - STATE.lastTime) / 1000;
+            STATE.lastTime = timestamp;
+            update(dt);
+            draw();
+            if (STATE.showFPS && dt > 0) {
+                FPS.buffer.push(1/dt);
+                if (FPS.buffer.length > 30) FPS.buffer.shift();
+                if (timestamp - FPS.lastUpdate >= 500) {
+                    const avg = Math.round(FPS.buffer.reduce((a,b)=>a+b,0)/FPS.buffer.length);
+                    const low = Math.round([...FPS.buffer].sort((a,b)=>a-b)[0]);
+                    document.getElementById('fps-counter').innerText = `FPS: ${avg} (Low: ${low})`;
+                    FPS.lastUpdate = timestamp;
+                }
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- ENTRY POINT ---
+        window.addEventListener('load', init);
+
     </script>
 </body>
 </html>
