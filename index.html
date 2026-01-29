@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TTR v17</title>
+    <title>TTR v18</title>
     <style>
         /* CORE STYLES */
         body {
@@ -171,7 +171,7 @@
 
     <div id="ui-layer">
         <div id="top-left-info">
-            <span id="version-display">v17</span>
+            <span id="version-display">v18</span>
             <span id="fps-counter">FPS: --</span>
         </div>
 
@@ -217,11 +217,11 @@
 
     <script>
         /** 
-         * TTR ENGINE v17
-         * Features: Console Bridge, Invisible Loading, Engine Hardening
+         * TTR ENGINE v18
+         * Fixes: Double Binding Crash, Spawn Safety, Alert Reporter
          */
 
-        // --- CONSOLE BRIDGE (CRASH REPORTER) ---
+        // --- CONSOLE BRIDGE ---
         const DEBUG_LOG = [];
         const originalLog = console.log;
         const originalWarn = console.warn;
@@ -240,43 +240,31 @@
                 if (type === 'warn') div.style.color = '#ffff55';
                 overlay.appendChild(div);
                 
-                // Auto-open on error
                 if (type === 'error') {
                     overlay.style.display = 'block';
-                    // If UI exists, toggle button state
                     const btn = document.getElementById('btn-toggle-debug');
-                    if (btn) {
-                        btn.innerText = "Show Live Debug: ON";
-                        btn.classList.add('active');
-                    }
+                    if (btn) { btn.innerText = "Show Live Debug: ON"; btn.classList.add('active'); }
                 }
             }
         }
 
-        console.log = function(...args) {
-            originalLog.apply(console, args);
-            logToOverlay(args.join(' '), 'info');
-        };
-        console.warn = function(...args) {
-            originalWarn.apply(console, args);
-            logToOverlay(args.join(' '), 'warn');
-        };
-        console.error = function(...args) {
-            originalError.apply(console, args);
-            logToOverlay(args.join(' '), 'error');
-        };
+        console.log = function(...args) { originalLog.apply(console, args); logToOverlay(args.join(' '), 'info'); };
+        console.warn = function(...args) { originalWarn.apply(console, args); logToOverlay(args.join(' '), 'warn'); };
+        console.error = function(...args) { originalError.apply(console, args); logToOverlay(args.join(' '), 'error'); };
 
         window.onerror = function(msg, url, line) {
-            console.error(`FATAL: ${msg} (Line ${line})`);
-            return false; // Let default handler run
+            const err = `FATAL: ${msg} (Line ${line})`;
+            console.error(err);
+            alert("GAME CRASHED:\n" + err); // System Alert fallback
+            return false;
         };
 
         window.onunhandledrejection = function(event) {
-            console.error(`UNHANDLED PROMISE: ${event.reason}`);
+            console.error(`PROMISE FAIL: ${event.reason}`);
         };
 
-        // --- CONFIG & CONSTANTS ---
-        const VERSION = "v17";
+        // --- CONFIG ---
+        const VERSION = "v18";
         const SETTINGS_KEY = "TTR_SETTINGS";
         const SAVE_KEY = "TTR_SAVE_DATA";
 
@@ -350,7 +338,7 @@
             // Start Generating Immediately (Invisible Load)
             setTimeout(generateWorld, 50);
 
-            // Bind Initialize Button
+            // Bind Initialize Button (Single Source of Truth)
             document.getElementById('btn-start').onclick = () => {
                 initAudio();
                 if (STATE.worldReady) {
@@ -380,6 +368,10 @@
             // Snap camera
             CAMERA.x = PLAYER.x - canvas.width/2;
             CAMERA.y = PLAYER.y - canvas.height/2;
+            
+            // Initial Spawn check
+            if (ENEMIES.length < 5) spawnEnemies();
+
             // Start Loop
             STATE.lastTime = performance.now();
             requestAnimationFrame(gameLoop);
@@ -438,6 +430,7 @@
             const imgData = wCtx.getImageData(0, 0, size, size);
             const data = imgData.data;
             
+            // Cellular Automata Pass to remove specks
             for (let y = 1; y < size - 1; y++) {
                 for (let x = 1; x < size - 1; x++) {
                     const idx = y * size + x;
@@ -454,6 +447,7 @@
                 }
             }
 
+            // Render Pass
             for (let y = 0; y < size; y++) {
                 for (let x = 0; x < size; x++) {
                     const idx = y * size + x;
@@ -588,7 +582,6 @@
                     console.log("Game Loaded. Seed: " + SEED);
                 } else {
                     SEED = Math.floor(Math.random() * 1000000);
-                    spawnEnemies();
                     console.log("New Game. Seed: " + SEED);
                 }
                 rng = mulberry32(SEED);
@@ -618,11 +611,14 @@
         }
 
         function spawnEnemies() {
+            // Safety Guard: Don't spawn if map isn't ready
+            if (!PHYSICS_MAP) return;
             ENEMIES = [];
             for(let i=0; i<5; i++) spawnEnemy();
         }
 
         function spawnEnemy() {
+            if (!PHYSICS_MAP) return;
             let safe = false, ex, ey, attempts=0;
             while(!safe && attempts<100) {
                 attempts++;
@@ -637,7 +633,7 @@
         function update(dt) {
             // ENGINE HARDENING: Guard Clauses
             if (!STATE.gameStarted || STATE.isPaused || STATE.gameOver) return;
-            if (!PHYSICS_MAP || !worldCanvas) return; // Prevent Black Screen Crash
+            if (!PHYSICS_MAP || !worldCanvas) return;
             
             if (dt > 0.1) dt = 0.1;
 
@@ -673,14 +669,17 @@
                     }
                 }
                 if (INPUT.touches.rightId !== null) {
-                    const dx = INPUT.touches.rightCurr.x - INPUT.touches.rightStart.x;
-                    const dy = INPUT.touches.rightCurr.y - INPUT.touches.rightStart.y;
+                    const start = INPUT.touches.rightStart;
+                    const curr = INPUT.touches.rightCurr;
+                    const dx = curr.x - start.x, dy = curr.y - start.y;
                     const dist = Math.sqrt(dx*dx + dy*dy);
                     const isMoved = (dist / 50) > CONFIG.joystickDeadzone;
+                    
                     if (isMoved) {
                         INPUT.aimAngle = Math.atan2(dy, dx);
                         INPUT.lastAimTime = Date.now();
                     }
+
                     if (STATE.autoFireMode === 0) INPUT.isFiring = true;
                     else if (STATE.autoFireMode === 1) INPUT.isFiring = isMoved;
                     else if (STATE.autoFireMode === 3) INPUT.isFiring = !isMoved;
@@ -701,6 +700,7 @@
                 INPUT.aimAngle = Math.atan2((INPUT.mouse.y + CAMERA.y) - PLAYER.y, (INPUT.mouse.x + CAMERA.x) - PLAYER.x);
                 INPUT.isFiring = INPUT.mouse.down;
             }
+
             if (INPUT.moveVector.x !== 0 || INPUT.moveVector.y !== 0) PLAYER.bodyAngle = Math.atan2(INPUT.moveVector.y, INPUT.moveVector.x);
             PLAYER.turretAngle = INPUT.aimAngle;
         }
@@ -743,8 +743,7 @@
             }
         }
 
-        // ... [Remaining logic: checkShops, updateEntities, fireWeapon, dropLoot, updateHUD, doGameOver, respawn, showZoneMsg, draw, drawTank, lighten, drawJoystick, setupUI, setupInputs, updateUIState, updateManualFireButton, resetInputs, handleTouchStart/Move/End] ...
-        // Re-implementing condensed versions to fit file size while keeping logic identical to v16
+        // ... [Helper functions: checkShops, updateEntities, fireWeapon, dropLoot, updateHUD, doGameOver, respawn, showZoneMsg, draw, drawTank, lighten, drawJoystick, setupUI, setupInputs, updateUIState, updateManualFireButton, resetInputs, handleTouchStart/Move/End] ...
         
         function checkShops() {
             let onShop = false;
@@ -832,9 +831,12 @@
         }
         function doGameOver() {
             STATE.gameOver = true;
-            if (PLAYER.cash > 0) { LOOT.push({ x: PLAYER.x, y: PLAYER.y, type: 3, value: PLAYER.cash }); PLAYER.cash = 0; updateHUD(); }
-            document.getElementById('game-over-screen').style.display = 'flex';
+            if (PLAYER.cash > 0) {
+                LOOT.push({ x: PLAYER.x, y: PLAYER.y, type: 3, value: PLAYER.cash });
+                PLAYER.cash = 0; updateHUD();
+            }
             saveGame();
+            document.getElementById('game-over-screen').style.display = 'flex';
         }
         function respawn() {
             PLAYER.hp = 5; PLAYER.x = 1600; PLAYER.y = 1600; STATE.gameOver = false; BULLETS = []; updateHUD();
@@ -847,7 +849,6 @@
         }
 
         function draw() {
-            // ENGINE HARDENING: Guard Clause
             if (!worldCanvas) return;
 
             ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -936,6 +937,17 @@
             ctx.beginPath(); ctx.arc(start.x, start.y, 50, 0, Math.PI*2); ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth=2; ctx.stroke();
             ctx.beginPath(); ctx.arc(curr.x, curr.y, 25, 0, Math.PI*2); ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fill();
         }
+
+        // --- PERLIN NOISE IMPLEMENTATION ---
+        const Noise = (function() {
+            const p = new Uint8Array(512);
+            const permutation = [151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,190,6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,125,136,171,168,68,175,74,165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,102,143,54,65,25,63,161,1,216,80,73,209,76,132,187,208,89,18,169,200,196,135,130,116,188,159,86,164,100,109,198,173,186,3,64,52,217,226,250,124,123,5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,223,183,170,213,119,248,152,2,44,154,163,70,221,153,101,155,167,43,172,9,129,22,39,253,19,98,108,110,79,113,224,232,178,185,112,104,218,246,97,228,251,34,242,193,238,210,144,12,191,179,162,241,81,51,145,235,249,14,239,107,49,192,214,31,181,199,106,157,184,84,204,176,115,121,50,45,127,4,150,254,138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180];
+            for (let i=0; i < 256 ; i++) p[256+i] = p[i] = permutation[i];
+            function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+            function lerp(t, a, b) { return a + t * (b - a); }
+            function grad(hash, x, y, z) { const h = hash & 15; const u = h<8 ? x : y, v = h<4 ? y : h==12||h==14 ? x : z; return ((h&1) == 0 ? u : -u) + ((h&2) == 0 ? v : -v); }
+            return { perlin2: function(x, y) { const X = Math.floor(x) & 255, Y = Math.floor(y) & 255; x -= Math.floor(x); y -= Math.floor(y); const u = fade(x), v = fade(y); const A = p[X]+Y, AA = p[A], AB = p[A+1], B = p[X+1]+Y, BA = p[B], BB = p[B+1]; return lerp(v, lerp(u, grad(p[AA], x, y, 0), grad(p[BA], x-1, y, 0)), lerp(u, grad(p[AB], x, y-1, 0), grad(p[BB], x-1, y-1, 0))); } };
+        })();
 
         init();
     </script>
