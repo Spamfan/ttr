@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TTR v20</title>
+    <title>TTR v21</title>
     <link rel="icon" href="data:,">
     <style>
         /* CORE STYLES */
@@ -156,13 +156,16 @@
 
     <canvas id="gameCanvas"></canvas>
 
+    <!-- START SCREEN -->
     <div id="start-screen" class="fullscreen-modal">
         <h1>Tank Tycoon</h1>
         <button id="btn-start" class="big-btn">INITIALIZE</button>
         <div id="loading-bar-container"><div id="loading-bar-fill"></div></div>
         <div id="loading-text">Generating World...</div>
+        <div style="position:absolute; top:10px; right:10px; color:#444; font-size:12px;">v21</div>
     </div>
 
+    <!-- GAME OVER SCREEN -->
     <div id="game-over-screen" class="fullscreen-modal" style="display:none;">
         <h1 style="color: #ff3333; border-color: #ff3333;">CRITICAL FAILURE</h1>
         <button id="btn-respawn" class="big-btn" style="background: #500; border-color: #f00;">REDEPLOY</button>
@@ -170,44 +173,57 @@
 
     <div id="ui-layer">
         <div id="top-left-info">
-            <span id="version-display">v20</span>
+            <span id="version-display">v21</span>
             <span id="fps-counter">FPS: --</span>
         </div>
+
         <div id="hud-hp-container">
             <div id="hud-hp-fill"></div>
             <div id="hud-hp-text">5/5</div>
         </div>
         <div id="hud-cash">$0</div>
         <div id="hud-zone-msg"></div>
+        
         <div id="pause-btn">&#10074;&#10074;</div>
         <div id="btn-manual-fire"></div>
+
         <div id="pause-overlay"></div>
+
         <div id="pause-modal">
             <h3 style="color:#ccc; margin-top:0;">SYSTEM PAUSED</h3>
+            
             <button id="btn-toggle-fps" class="modal-btn active">Show FPS: ON</button>
+            
+            <!-- Controls -->
             <button id="btn-auto-fire" class="modal-btn active">Auto-Fire: ANY</button>
             <div id="autofire-desc" class="modal-desc">Fires when right stick is touched.</div>
+            
             <button id="btn-static-joy" class="modal-btn">Static Joysticks: OFF</button>
             <div class="modal-desc">Fixes controls to bottom corners.</div>
+
             <button id="btn-tap-fire" class="modal-btn">Tap to Fire: OFF</button>
             <div class="modal-desc">Tap screen to aim & shoot (Mobile).</div>
+
             <button id="btn-toggle-debug" class="modal-btn">Show Live Debug: OFF</button>
             <button id="btn-copy-log" class="modal-btn">Copy Log</button>
+            
             <hr style="border-color:#444; margin: 15px 0;">
             <button id="btn-clear-settings" class="modal-btn" style="border-color:#884444; color:#daa;">Clear Settings</button>
             <button id="btn-start-over" class="modal-btn" style="border-color:#f00; color:#f88;">Start Over</button>
+            
             <button id="btn-close-pause" class="modal-btn" style="background: #500; border-color: #800; margin-top: 20px;">RESUME</button>
         </div>
+        
         <div id="debug-overlay"></div>
     </div>
 
     <script>
         /** 
-         * TTR ENGINE v20
-         * Fixes: Fatal Crash on Mobile (Strict Linear Code Ordering)
+         * TTR ENGINE v21
+         * Features: Dual-Layer Terrain, Despeckle, Economy Tiers, Death Bags, Strict Input Zones
          */
 
-        // --- 1. CONSOLE BRIDGE ---
+        // --- CONSOLE BRIDGE ---
         const DEBUG_LOG = [];
         const originalLog = console.log;
         const originalWarn = console.warn;
@@ -240,12 +256,12 @@
             alert("GAME CRASHED:\n" + err); 
             return false;
         };
-        window.onunhandledrejection = function(event) { console.error(`PROMISE FAIL: ${event.reason}`); };
 
-        // --- 2. CONSTANTS & CONFIG ---
-        const VERSION = "v20";
+        // --- CONFIG & CONSTANTS ---
+        const VERSION = "v21";
         const SETTINGS_KEY = "TTR_SETTINGS";
         const SAVE_KEY = "TTR_SAVE_DATA";
+
         const CONFIG = {
             worldSize: 3200,
             colors: {
@@ -254,12 +270,25 @@
                 sand: '#d2b48c', sandNoise: '#c2a47c',
                 concrete: '#555555', tankBody: '#37474F', tankTurret: '#546E7A', enemyBody: '#8D6E63',
             },
-            playerSpeed: 250, waterSpeedMult: 0.3, sandSpeedMult: 0.5, 
+            playerSpeed: 250, 
+            waterSpeedMult: 0.3, sandSpeedMult: 0.5, 
             fireRate: 1.0, bulletSpeed: 700, bulletLife: 1.5,
             joystickDeadzone: 0.2, cameraDamping: 10
         };
 
-        // --- 3. STATE ---
+        const TIERS = {
+            cash: [
+                { price: 10, rate: 0.1 }, { price: 50, rate: 0.25 }, { price: 500, rate: 1.0 },
+                { price: 2500, rate: 5.0 }, { price: 5000, rate: 10.0 }, { price: 25000, rate: 100.0 },
+                { price: 100000, rate: 500.0 }, { price: 500000, rate: 2500.0 }, { price: 5000000, rate: 5000.0 },
+                { price: 25000000, rate: 25000.0 }
+            ],
+            med: [
+                { price: 100, rate: 1 }, { price: 500, rate: 2 }, { price: 1000, rate: 3 }
+            ]
+        };
+
+        // --- STATE ---
         const STATE = {
             worldReady: false, startOnLoad: false,
             gameStarted: false, gameOver: false, lastTime: 0, 
@@ -270,7 +299,7 @@
             wasInWater: false, manualFirePressed: false
         };
 
-        // --- 4. LIBRARIES (NOISE) ---
+        // --- NOISE ---
         const Noise = (function() {
             const p = new Uint8Array(512);
             const permutation = [151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,190,6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,125,136,171,168,68,175,74,165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,102,143,54,65,25,63,161,1,216,80,73,209,76,132,187,208,89,18,169,200,196,135,130,116,188,159,86,164,100,109,198,173,186,3,64,52,217,226,250,124,123,5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,223,183,170,213,119,248,152,2,44,154,163,70,221,153,101,155,167,43,172,9,129,22,39,253,19,98,108,110,79,113,224,232,178,185,112,104,218,246,97,228,251,34,242,193,238,210,144,12,191,179,162,241,81,51,145,235,249,14,239,107,49,192,214,31,181,199,106,157,184,84,204,176,115,121,50,45,127,4,150,254,138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180];
@@ -281,25 +310,31 @@
             return { perlin2: function(x, y) { const X = Math.floor(x) & 255, Y = Math.floor(y) & 255; x -= Math.floor(x); y -= Math.floor(y); const u = fade(x), v = fade(y); const A = p[X]+Y, AA = p[A], AB = p[A+1], B = p[X+1]+Y, BA = p[B], BB = p[B+1]; return lerp(v, lerp(u, grad(p[AA], x, y, 0), grad(p[BA], x-1, y, 0)), lerp(u, grad(p[AB], x, y-1, 0), grad(p[BB], x-1, y-1, 0))); } };
         })();
 
-        // --- 5. GLOBALS ---
+        // --- GLOBALS ---
         const CAMERA = { x: 0, y: 0 };
         const FPS = { buffer: [], lastUpdate: 0, display: "FPS: --" };
         let PHYSICS_MAP = null; 
         let SEED = 1;
+        
+        // Shops initialized with Tier 0
         let SHOPS = [
-            { id: 'med', type: 'med', x: 1550, y: 1550, w: 60, h: 60, price: 15, unlocked: false, color: '#444', icon: '+' },
-            { id: 'cash', type: 'cash', x: 1650, y: 1550, w: 60, h: 60, price: 10, unlocked: false, color: '#444', icon: '$' }
+            { id: 'med', type: 'med', x: 1550, y: 1550, w: 60, h: 60, tier: 0, unlocked: false, color: '#444', icon: '+' },
+            { id: 'cash', type: 'cash', x: 1650, y: 1550, w: 60, h: 60, tier: 0, unlocked: false, color: '#444', icon: '$' }
         ];
+        // Track last known shop interaction to allow "drive off" logic
+        let lastShopContact = { med: false, cash: false };
+
         let shopTimer = 0;
         let enemySpawnTimer = 0;
         let saveTimer = 0;
+
         let PLAYER = { x: 1600, y: 1600, radius: 20, cooldown: 0, bodyAngle: 0, turretAngle: 0, hp: 5, maxHp: 5, cash: 0, passiveIncome: 0 };
         let BULLETS = [], PARTICLES = [], ENEMIES = [], LOOT = [];
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d', { alpha: false });
         let worldCanvas = null;
         
-        // --- 6. UTILITIES ---
+        // --- UTILS ---
         function log(msg) { console.log(msg); }
         
         function resize() {
@@ -325,7 +360,14 @@
         }
         let rng = mulberry32(1);
 
-        // --- 7. AUDIO ---
+        function formatMoney(amount) {
+            if (amount < 1000) return "$" + amount.toFixed(2);
+            if (amount < 1000000) return "$" + (amount/1000).toFixed(2) + "k";
+            if (amount < 1000000000) return "$" + (amount/1000000).toFixed(2) + "m";
+            return "$" + (amount/1000000000).toFixed(2) + "b";
+        }
+
+        // --- AUDIO ---
         let audioCtx = null;
         let splashBuffer = null;
         let sandBuffer = null;
@@ -341,6 +383,7 @@
         }
         function createBuffers() {
             if (!audioCtx) return;
+            // Synth fallbacks
             let sb = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.5, audioCtx.sampleRate);
             let d = sb.getChannelData(0);
             for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i/d.length);
@@ -352,6 +395,9 @@
         }
         function playSound(type) {
             if (!audioCtx || audioCtx.state !== 'running') return;
+            // Placeholder for file loading if assets exist
+            // const audio = new Audio(`assets/${type}.mp3`); audio.play().catch(e => { /* fallback */ });
+            
             const gain = audioCtx.createGain(); gain.connect(audioCtx.destination);
             const t = audioCtx.currentTime;
             
@@ -381,7 +427,7 @@
             }
         }
 
-        // --- 8. INPUT SYSTEM ---
+        // --- INPUT SYSTEM ---
         const INPUT = { keys: {}, mouse: { x: 0, y: 0, down: false }, moveVector: { x: 0, y: 0 }, aimAngle: 0, isFiring: false, lastAimTime: 0, touches: { leftId: null, leftStart: {x:0,y:0}, leftCurr: {x:0,y:0}, rightId: null, rightStart: {x:0,y:0}, rightCurr: {x:0,y:0} } };
 
         function setupInputs() {
@@ -402,11 +448,33 @@
             e.preventDefault(); STATE.isMobile = true;
             for (let t of e.changedTouches) {
                 const isRight = t.clientX >= canvas.width / 2;
-                if (STATE.tapToFire && isRight) {
-                    const worldX = t.clientX + CAMERA.x; const worldY = t.clientY + CAMERA.y;
-                    INPUT.aimAngle = Math.atan2(worldY - PLAYER.y, worldX - PLAYER.x);
-                    INPUT.isFiring = true; INPUT.lastAimTime = Date.now(); continue; 
+                
+                // Tap to Fire Logic
+                if (STATE.tapToFire) {
+                    // If Static Joysticks ON, ignore touches NEAR the visual joystick
+                    if (STATE.staticJoysticks) {
+                        const joyX = isRight ? canvas.width * 0.85 : canvas.width * 0.15;
+                        const joyY = canvas.height * 0.85;
+                        const dist = Math.hypot(t.clientX - joyX, t.clientY - joyY);
+                        // 70px buffer radius for joystick interaction
+                        if (dist < 70) {
+                            // Let standard logic handle joystick grab below
+                        } else {
+                            // Tap to Fire!
+                            const worldX = t.clientX + CAMERA.x; const worldY = t.clientY + CAMERA.y;
+                            INPUT.aimAngle = Math.atan2(worldY - PLAYER.y, worldX - PLAYER.x);
+                            INPUT.isFiring = true; INPUT.lastAimTime = Date.now();
+                            continue; 
+                        }
+                    } else if (isRight) {
+                        // Standard Tap to Fire on right side
+                        const worldX = t.clientX + CAMERA.x; const worldY = t.clientY + CAMERA.y;
+                        INPUT.aimAngle = Math.atan2(worldY - PLAYER.y, worldX - PLAYER.x);
+                        INPUT.isFiring = true; INPUT.lastAimTime = Date.now();
+                        continue;
+                    }
                 }
+
                 if (!isRight && INPUT.touches.leftId === null) {
                     INPUT.touches.leftId = t.identifier;
                     if (STATE.staticJoysticks) INPUT.touches.leftStart = { x: canvas.width * 0.15, y: canvas.height * 0.85 };
@@ -422,6 +490,7 @@
             }
             updateManualFireButton();
         }
+
         function handleTouchMove(e) {
             e.preventDefault();
             for (let t of e.changedTouches) {
@@ -429,20 +498,23 @@
                 else if (t.identifier === INPUT.touches.rightId) INPUT.touches.rightCurr = { x: t.clientX, y: t.clientY };
             }
         }
+
         function handleTouchEnd(e) {
             e.preventDefault();
             for (let t of e.changedTouches) {
                 if (t.identifier === INPUT.touches.leftId) { INPUT.touches.leftId = null; INPUT.moveVector = {x:0,y:0}; }
                 else if (t.identifier === INPUT.touches.rightId) INPUT.touches.rightId = null;
-                if (STATE.tapToFire && t.clientX >= canvas.width/2) INPUT.isFiring = false;
+                // Stop firing if this was a tap
+                if (STATE.tapToFire) INPUT.isFiring = false;
             }
         }
+
         function updateManualFireButton() {
             const btn = document.getElementById('btn-manual-fire');
             btn.style.display = (STATE.isMobile && STATE.autoFireMode === 2 && !STATE.tapToFire) ? 'block' : 'none';
         }
 
-        // --- 9. SAVE SYSTEM ---
+        // --- SAVE SYSTEM ---
         function loadSettings() {
             try {
                 const saved = localStorage.getItem(SETTINGS_KEY);
@@ -464,6 +536,7 @@
                     console.log("Game Loaded. Seed: " + SEED);
                 } else {
                     SEED = Math.floor(Math.random() * 1000000);
+                    spawnEnemies();
                     console.log("New Game. Seed: " + SEED);
                 }
                 rng = mulberry32(SEED);
@@ -483,11 +556,12 @@
         }
         function clearSettings() {
             if (confirm("Reset settings to default? World data will be kept.")) {
-                localStorage.removeItem(SETTINGS_KEY); location.reload();
+                localStorage.removeItem(SETTINGS_KEY);
+                alert("Settings Cleared. Reload to see defaults.");
             }
         }
 
-        // --- 10. GENERATION LOGIC ---
+        // --- GENERATION ---
         function generateWorld() {
             const size = CONFIG.worldSize;
             const TEMP_MAP = new Uint8Array(size * size);
@@ -512,11 +586,13 @@
                     const cy = y + row;
                     for (let cx = 0; cx < size; cx++) {
                         const pIdx = cy * size + cx;
-                        let n = Noise.perlin2(cx * noiseScale, cy * noiseScale);
-                        n += 0.5 * Noise.perlin2(cx * noiseScale * 3, cy * noiseScale * 3);
+                        
+                        // DUAL NOISE LAYERS
+                        let nWater = Noise.perlin2(cx * noiseScale, cy * noiseScale);
+                        let nSand = Noise.perlin2((cx + 9999) * noiseScale, (cy + 9999) * noiseScale);
 
-                        if (n < -0.25) TEMP_MAP[pIdx] = 1; // Water
-                        else if (n < -0.15) TEMP_MAP[pIdx] = 3; // Sand
+                        if (nWater < -0.25) TEMP_MAP[pIdx] = 1; // Water
+                        else if (nSand < -0.25) TEMP_MAP[pIdx] = 3; // Sand
                         else TEMP_MAP[pIdx] = 0; // Land
                     }
                 }
@@ -539,6 +615,7 @@
             const imgData = wCtx.getImageData(0, 0, size, size);
             const data = imgData.data;
             
+            // STRICT 3x3 DESPECKLE
             for (let y = 1; y < size - 1; y++) {
                 for (let x = 1; x < size - 1; x++) {
                     const idx = y * size + x;
@@ -550,11 +627,12 @@
                                 if (PHYSICS_MAP[(y+dy)*size + (x+dx)] === type) neighbors++;
                             }
                         }
-                        if (neighbors < 4) PHYSICS_MAP[idx] = 0;
+                        if (neighbors < 5) PHYSICS_MAP[idx] = 0; // Kill small blobs
                     }
                 }
             }
 
+            // Render
             for (let y = 0; y < size; y++) {
                 for (let x = 0; x < size; x++) {
                     const idx = y * size + x;
@@ -585,6 +663,13 @@
             wCtx.fillStyle = '#555';
             wCtx.fillRect(center - baseSize/2, center - baseSize/2, baseSize, baseSize);
             
+            // Draw Labels
+            wCtx.fillStyle = "rgba(255,255,255,0.3)";
+            wCtx.font = "bold 40px Arial";
+            wCtx.textAlign = "center";
+            wCtx.fillText("MED BAY", center - 50, center - 50 - 40);
+            wCtx.fillText("CASH BAY", center + 50, center - 50 - 40);
+
             for(let by = center - baseSize/2; by < center + baseSize/2; by++) {
                 for(let bx = center - baseSize/2; bx < center + baseSize/2; bx++) {
                     PHYSICS_MAP[Math.floor(by)*CONFIG.worldSize + Math.floor(bx)] = 2;
@@ -610,7 +695,7 @@
             }
         }
 
-        // --- 11. GAMEPLAY LOGIC ---
+        // --- GAMEPLAY LOGIC ---
         function startGame() {
             document.getElementById('start-screen').style.display = 'none';
             document.getElementById('ui-layer').style.display = 'block';
@@ -637,61 +722,9 @@
                 ex = rng() * CONFIG.worldSize;
                 ey = rng() * CONFIG.worldSize;
                 const idx = Math.max(0, Math.min(Math.floor(ey) * CONFIG.worldSize + Math.floor(ex), CONFIG.worldSize * CONFIG.worldSize - 1));
-                if (PHYSICS_MAP && PHYSICS_MAP[idx] !== 1 && Math.hypot(ex-PLAYER.x, ey-PLAYER.y) > 800) safe = true;
+                if (PHYSICS_MAP && PHYSICS_MAP[idx] === 0 && Math.hypot(ex-PLAYER.x, ey-PLAYER.y) > 800) safe = true;
             }
             if (safe) ENEMIES.push({ x: ex, y: ey, angle: 0, cooldown: rng()*2, hp: 3, maxHp: 3, radius: 20 });
-        }
-
-        function checkShops() {
-            let onShop = false;
-            for (let s of SHOPS) {
-                if (PLAYER.x > s.x && PLAYER.x < s.x + s.w && PLAYER.y > s.y && PLAYER.y < s.y + s.h) {
-                    onShop = true;
-                    if (!s.unlocked) {
-                        if (PLAYER.cash >= s.price) {
-                            PLAYER.cash -= s.price; s.unlocked = true;
-                            if (s.type === 'cash') PLAYER.passiveIncome += 0.1;
-                            playSound('pickup');
-                        } else showZoneMsg(`Unlock: $${s.price}`);
-                    } else if (s.type === 'med' && PLAYER.hp < PLAYER.maxHp) {
-                        PLAYER.hp++; playSound('pickup');
-                    }
-                }
-            }
-            if (!onShop) document.getElementById('hud-zone-msg').style.opacity = 0;
-        }
-
-        function showZoneMsg(msg) {
-            const el = document.getElementById('hud-zone-msg'); el.innerText = msg; el.style.opacity = 1;
-        }
-
-        function fireWeapon(source, type) {
-            if (type === 'player') playSound('shoot'); else playSound('enemy_shoot');
-            const angle = (type === 'player') ? source.turretAngle : source.angle;
-            BULLETS.push({ x: source.x + Math.cos(angle)*35, y: source.y + Math.sin(angle)*35, vx: Math.cos(angle)*CONFIG.bulletSpeed, vy: Math.sin(angle)*CONFIG.bulletSpeed, life: CONFIG.bulletLife, owner: type });
-        }
-        function dropLoot(x, y) {
-            const rand = Math.random();
-            let type = (PLAYER.hp === PLAYER.maxHp) ? (rand < 0.49 ? 2 : 1) : (rand < 0.33 ? 0 : rand < 0.66 ? 2 : 1);
-            LOOT.push({ x, y, type });
-        }
-        function updateHUD() {
-            const pct = (PLAYER.hp / PLAYER.maxHp) * 100;
-            document.getElementById('hud-hp-fill').style.width = `${pct}%`;
-            document.getElementById('hud-hp-text').innerText = `${PLAYER.hp}/${PLAYER.maxHp}`;
-            document.getElementById('hud-cash').innerText = "$" + PLAYER.cash.toFixed(1);
-        }
-        function doGameOver() {
-            STATE.gameOver = true;
-            if (PLAYER.cash > 0) { LOOT.push({ x: PLAYER.x, y: PLAYER.y, type: 3, value: PLAYER.cash }); PLAYER.cash = 0; updateHUD(); }
-            document.getElementById('game-over-screen').style.display = 'flex';
-            saveGame();
-        }
-        function respawn() {
-            PLAYER.hp = 5; PLAYER.x = 1600; PLAYER.y = 1600; STATE.gameOver = false; BULLETS = []; updateHUD();
-            document.getElementById('game-over-screen').style.display = 'none';
-            resetInputs(); CAMERA.x = PLAYER.x - canvas.width/2; CAMERA.y = PLAYER.y - canvas.height/2;
-            saveGame();
         }
 
         function update(dt) {
@@ -704,7 +737,11 @@
             
             shopTimer += dt;
             if (PLAYER.passiveIncome > 0) PLAYER.cash += PLAYER.passiveIncome * dt;
-            if (shopTimer >= 0.2) { shopTimer = 0; updateHUD(); checkShops(); }
+            if (shopTimer >= 0.2) {
+                shopTimer = 0;
+                updateHUD();
+                checkShops();
+            }
             enemySpawnTimer += dt;
             if (enemySpawnTimer > 5) { enemySpawnTimer = 0; if (ENEMIES.length < 5) spawnEnemy(); }
             saveTimer += dt;
@@ -725,9 +762,8 @@
                     }
                 }
                 if (INPUT.touches.rightId !== null) {
-                    const start = INPUT.touches.rightStart;
-                    const curr = INPUT.touches.rightCurr;
-                    const dx = curr.x - start.x, dy = curr.y - start.y;
+                    const dx = INPUT.touches.rightCurr.x - INPUT.touches.rightStart.x;
+                    const dy = INPUT.touches.rightCurr.y - INPUT.touches.rightStart.y;
                     const dist = Math.sqrt(dx*dx + dy*dy);
                     const isMoved = (dist / 50) > CONFIG.joystickDeadzone;
                     if (isMoved) { INPUT.aimAngle = Math.atan2(dy, dx); INPUT.lastAimTime = Date.now(); }
@@ -791,6 +827,53 @@
             }
         }
 
+        function checkShops() {
+            let onShop = false;
+            for (let s of SHOPS) {
+                if (PLAYER.x > s.x && PLAYER.x < s.x + s.w && PLAYER.y > s.y && PLAYER.y < s.y + s.h) {
+                    onShop = true;
+                    // Check if player just arrived (was not on shop last tick)
+                    const justArrived = !lastShopContact[s.id];
+                    lastShopContact[s.id] = true;
+
+                    if (!s.unlocked) {
+                        if (justArrived && PLAYER.cash >= s.price) {
+                            PLAYER.cash -= s.price; s.unlocked = true;
+                            if (s.type === 'cash') PLAYER.passiveIncome += 0.1;
+                            playSound('pickup');
+                        } else showZoneMsg(`Unlock: ${formatMoney(s.price)}`);
+                    } else {
+                        // TIER UPGRADE Logic
+                        let nextTier;
+                        if (s.type === 'cash' && s.tier < TIERS.cash.length - 1) nextTier = TIERS.cash[s.tier + 1];
+                        else if (s.type === 'med' && s.tier < TIERS.med.length - 1) nextTier = TIERS.med[s.tier + 1];
+
+                        if (nextTier) {
+                            if (justArrived && PLAYER.cash >= nextTier.price) {
+                                PLAYER.cash -= nextTier.price;
+                                s.tier++;
+                                // Apply Upgrade
+                                if (s.type === 'cash') PLAYER.passiveIncome = nextTier.rate;
+                                // Med bay heals instantly on step
+                                playSound('pickup');
+                            } else showZoneMsg(`Upgrade T${s.tier+1}: ${formatMoney(nextTier.price)}`);
+                        }
+
+                        // Active Effect
+                        if (s.type === 'med') {
+                            const healRate = TIERS.med[s.tier].rate; // 1, 2, or 3
+                            if (PLAYER.hp < PLAYER.maxHp) {
+                                PLAYER.hp = Math.min(PLAYER.maxHp, PLAYER.hp + (healRate * 0.2)); // 0.2s tick
+                            } 
+                        }
+                    }
+                } else {
+                    lastShopContact[s.id] = false;
+                }
+            }
+            if (!onShop) document.getElementById('hud-zone-msg').style.opacity = 0;
+        }
+
         function updateEntities(dt) {
             for (let i = ENEMIES.length - 1; i >= 0; i--) {
                 let e = ENEMIES[i];
@@ -825,7 +908,7 @@
                 let l = LOOT[i];
                 if (Math.hypot(PLAYER.x - l.x, PLAYER.y - l.y) < 30) {
                     playSound('pickup');
-                    if (l.type === 0 && PLAYER.hp < PLAYER.maxHp) PLAYER.hp++;
+                    if (l.type === 0 && PLAYER.hp < PLAYER.maxHp) PLAYER.hp = Math.min(PLAYER.maxHp, PLAYER.hp + 1);
                     else if (l.type === 1) PLAYER.cash += 1;
                     else if (l.type === 2) PLAYER.cash += 5;
                     else if (l.type === 3) PLAYER.cash += l.value;
@@ -840,7 +923,49 @@
             }
         }
 
-        // --- DRAW ---
+        function fireWeapon(source, type) {
+            if (type === 'player') playSound('shoot'); else playSound('enemy_shoot');
+            const angle = (type === 'player') ? source.turretAngle : source.angle;
+            BULLETS.push({ x: source.x + Math.cos(angle)*35, y: source.y + Math.sin(angle)*35, vx: Math.cos(angle)*CONFIG.bulletSpeed, vy: Math.sin(angle)*CONFIG.bulletSpeed, life: CONFIG.bulletLife, owner: type });
+        }
+        function dropLoot(x, y) {
+            const rand = Math.random();
+            let type = (PLAYER.hp === PLAYER.maxHp) ? (rand < 0.49 ? 2 : 1) : (rand < 0.33 ? 0 : rand < 0.66 ? 2 : 1);
+            LOOT.push({ x, y, type });
+        }
+        function updateHUD() {
+            const pct = (PLAYER.hp / PLAYER.maxHp) * 100;
+            document.getElementById('hud-hp-fill').style.width = `${pct}%`;
+            document.getElementById('hud-hp-text').innerText = `${PLAYER.hp.toFixed(1)}/${PLAYER.maxHp}`;
+            document.getElementById('hud-cash').innerText = formatMoney(PLAYER.cash);
+        }
+        function doGameOver() {
+            STATE.gameOver = true;
+            if (PLAYER.cash > 0) { 
+                LOOT.push({ x: PLAYER.x, y: PLAYER.y, type: 3, value: PLAYER.cash });
+                // Limit Bags to 10
+                const bags = LOOT.filter(l => l.type === 3);
+                if (bags.length > 10) {
+                    const oldest = bags[0];
+                    const idx = LOOT.indexOf(oldest);
+                    if (idx > -1) LOOT.splice(idx, 1);
+                }
+                PLAYER.cash = 0; 
+                updateHUD(); 
+            }
+            saveGame();
+            document.getElementById('game-over-screen').style.display = 'flex';
+        }
+        function respawn() {
+            PLAYER.hp = 5; PLAYER.x = 1600; PLAYER.y = 1600; STATE.gameOver = false; BULLETS = []; updateHUD();
+            document.getElementById('game-over-screen').style.display = 'none';
+            resetInputs(); CAMERA.x = PLAYER.x - canvas.width/2; CAMERA.y = PLAYER.y - canvas.height/2;
+            saveGame();
+        }
+        function showZoneMsg(msg) {
+            const el = document.getElementById('hud-zone-msg'); el.innerText = msg; el.style.opacity = 1;
+        }
+
         function draw() {
             if (!worldCanvas) return;
             ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -853,7 +978,6 @@
                 ctx.fillStyle = s.color; ctx.fillRect(s.x, s.y, s.w, s.h);
                 ctx.shadowBlur = 0; ctx.fillStyle = '#fff'; ctx.font = "bold 30px Arial"; ctx.textAlign = "center";
                 ctx.fillText(s.icon, s.x + s.w/2, s.y + s.h/2 + 10);
-                if (!s.unlocked) { ctx.font = "bold 14px Arial"; ctx.fillStyle = "#FFD700"; ctx.fillText("$"+s.price, s.x + s.w/2, s.y - 10); }
             }
 
             for (let l of LOOT) {
@@ -930,144 +1054,7 @@
             ctx.beginPath(); ctx.arc(curr.x, curr.y, 25, 0, Math.PI*2); ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fill();
         }
 
-        // --- 12. UI & INIT ---
-        function updateUIState() {
-            const mapAF = ["ANY", "AIMING", "OFF", "NOT AIMING"];
-            const descAF = ["Fires on touch.", "Fires when aiming.", "Use fire button.", "Fires when stick touched inside deadzone."];
-            const btnAF = document.getElementById('btn-auto-fire');
-            const txtAF = document.getElementById('autofire-desc');
-            btnAF.innerText = `Auto-Fire: ${mapAF[STATE.autoFireMode]}`;
-            txtAF.innerText = descAF[STATE.autoFireMode];
-            
-            updateToggle('btn-toggle-fps', STATE.showFPS, "Show FPS");
-            updateToggle('btn-static-joy', STATE.staticJoysticks, "Static Joysticks");
-            updateToggle('btn-tap-fire', STATE.tapToFire, "Tap to Fire");
-            updateManualFireButton();
-        }
-        function updateToggle(id, val, text) {
-            const el = document.getElementById(id);
-            el.innerText = `${text}: ${val ? 'ON' : 'OFF'}`;
-            el.classList.toggle('active', val);
-        }
-
-        function setupUI() {
-            const bindBtn = (id, cb) => {
-                const el = document.getElementById(id);
-                const h = (e) => { e.preventDefault(); e.stopPropagation(); cb(el); return false; };
-                el.addEventListener('touchend', h, {passive:false}); el.addEventListener('click', h);
-            };
-            const bindPress = (id, start, end) => {
-                const el = document.getElementById(id);
-                const s = (e) => { e.preventDefault(); e.stopPropagation(); start(); };
-                const f = (e) => { e.preventDefault(); e.stopPropagation(); end(); };
-                el.addEventListener('touchstart', s, {passive:false}); el.addEventListener('mousedown', s);
-                el.addEventListener('touchend', f, {passive:false}); el.addEventListener('mouseup', f);
-            };
-
-            bindBtn('btn-respawn', respawn);
-            bindBtn('pause-btn', () => togglePause(true));
-            bindBtn('btn-close-pause', () => togglePause(false));
-            const overlay = document.getElementById('pause-overlay');
-            const closeBg = (e) => { if (e.target === overlay) { e.preventDefault(); togglePause(false); }};
-            overlay.addEventListener('touchend', closeBg); overlay.addEventListener('click', closeBg);
-
-            bindBtn('btn-toggle-fps', () => { STATE.showFPS = !STATE.showFPS; document.getElementById('top-left-info').style.display = STATE.showFPS ? 'flex' : 'none'; updateUIState(); saveGame(); });
-            
-            bindBtn('btn-static-joy', () => { 
-                STATE.staticJoysticks = !STATE.staticJoysticks; 
-                if (STATE.tapToFire) STATE.tapToFire = false; 
-                updateUIState(); saveGame(); 
-            });
-            
-            bindBtn('btn-tap-fire', () => { 
-                STATE.tapToFire = !STATE.tapToFire;
-                if (STATE.tapToFire) {
-                    STATE.savedStatic = STATE.staticJoysticks;
-                    STATE.savedAutoFire = STATE.autoFireMode;
-                    STATE.staticJoysticks = true; 
-                    STATE.autoFireMode = 2; 
-                } else {
-                    STATE.staticJoysticks = STATE.savedStatic;
-                    STATE.autoFireMode = STATE.savedAutoFire;
-                }
-                updateUIState(); saveGame(); 
-            });
-            
-            bindBtn('btn-auto-fire', () => { 
-                STATE.autoFireMode = (STATE.autoFireMode + 1) % 4; 
-                if (STATE.tapToFire) STATE.tapToFire = false; 
-                updateUIState(); saveGame(); 
-            });
-            
-            bindBtn('btn-toggle-debug', (el) => { STATE.showDebug = !STATE.showDebug; document.getElementById('debug-overlay').style.display = STATE.showDebug ? 'block' : 'none'; document.getElementById('btn-copy-log').style.display = STATE.showDebug ? 'block' : 'none'; el.classList.toggle('active'); });
-            bindBtn('btn-copy-log', () => navigator.clipboard.writeText(DEBUG_LOG.join('\n')));
-            bindBtn('btn-start-over', startOver);
-            bindBtn('btn-clear-settings', clearSettings);
-            
-            bindPress('btn-manual-fire', () => STATE.manualFirePressed = true, () => STATE.manualFirePressed = false);
-        }
-
-        function togglePause(pause) {
-            STATE.isPaused = pause;
-            document.getElementById('pause-modal').style.display = pause ? 'block' : 'none';
-            document.getElementById('pause-overlay').style.display = pause ? 'block' : 'none';
-            if (!pause) STATE.lastTime = performance.now();
-        }
-
-        // --- 13. INIT FUNCTION (DEFINED LAST) ---
-        function init() {
-            log(`Initializing TTR ${VERSION}`);
-            loadGame();
-            resize();
-            window.addEventListener('resize', resize);
-            
-            // Start Generating Immediately (Invisible Load)
-            setTimeout(generateWorld, 50);
-
-            // Bind Initialize Button (Single Source of Truth)
-            document.getElementById('btn-start').onclick = () => {
-                initAudio();
-                if (STATE.worldReady) {
-                    startGame();
-                } else {
-                    STATE.startOnLoad = true;
-                    document.getElementById('btn-start').style.display = 'none';
-                    document.getElementById('loading-bar-container').style.display = 'block';
-                    document.getElementById('loading-text').style.visibility = 'visible';
-                }
-            };
-
-            setupInputs();
-            setupUI();
-            updateUIState();
-
-            window.addEventListener('blur', () => {
-                if (STATE.gameStarted && !STATE.isPaused && !STATE.gameOver) { togglePause(true); resetInputs(); saveGame(); }
-            });
-        }
-
-        function gameLoop(timestamp) {
-            if (!STATE.lastTime) STATE.lastTime = timestamp;
-            const dt = (timestamp - STATE.lastTime) / 1000;
-            STATE.lastTime = timestamp;
-            update(dt);
-            draw();
-            if (STATE.showFPS && dt > 0) {
-                FPS.buffer.push(1/dt);
-                if (FPS.buffer.length > 30) FPS.buffer.shift();
-                if (timestamp - FPS.lastUpdate >= 500) {
-                    const avg = Math.round(FPS.buffer.reduce((a,b)=>a+b,0)/FPS.buffer.length);
-                    const low = Math.round([...FPS.buffer].sort((a,b)=>a-b)[0]);
-                    document.getElementById('fps-counter').innerText = `FPS: ${avg} (Low: ${low})`;
-                    FPS.lastUpdate = timestamp;
-                }
-            }
-            requestAnimationFrame(gameLoop);
-        }
-
-        // --- 14. ENTRY POINT ---
-        window.addEventListener('load', init);
-
+        init();
     </script>
 </body>
 </html>
