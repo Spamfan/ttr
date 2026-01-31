@@ -3,54 +3,170 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TTR v23</title>
+    <title>TTR v24</title>
     <link rel="icon" href="data:,">
     <style>
         /* CORE STYLES */
-        body { margin: 0; padding: 0; background-color: #111; overflow: hidden; touch-action: none; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #eee; user-select: none; -webkit-user-select: none; }
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #111;
+            overflow: hidden;
+            touch-action: none;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #eee;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
         canvas { display: block; }
 
         /* UI OVERLAY */
-        #ui-layer { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-        .hud-text { text-shadow: 1px 1px 2px #000; font-weight: 600; pointer-events: auto; letter-spacing: 1px; }
-        #top-left-info { position: absolute; top: 15px; left: 15px; display: flex; gap: 15px; font-size: 12px; color: #aaa; pointer-events: none; }
+        #ui-layer {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+        }
+
+        .hud-text {
+            text-shadow: 1px 1px 2px #000;
+            font-weight: 600;
+            pointer-events: auto;
+            letter-spacing: 1px;
+        }
+
+        #top-left-info {
+            position: absolute; top: 15px; left: 15px;
+            display: flex; gap: 15px; font-size: 12px; color: #aaa;
+            pointer-events: none;
+        }
 
         /* HP BAR */
-        #hud-hp-container { position: absolute; top: 15px; right: 60px; width: 220px; height: 28px; background: #000; border: 2px solid #444; border-radius: 2px; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
-        #hud-hp-fill { width: 100%; height: 100%; background: linear-gradient(180deg, #4CAF50, #2E7D32); transition: width 0.2s; }
-        #hud-hp-text { position: absolute; top: 0; left: 0; width: 100%; line-height: 28px; text-align: center; font-size: 14px; color: #fff; text-shadow: 1px 1px 2px #000; }
-        #hud-cash { position: absolute; top: 50px; right: 60px; font-size: 20px; color: #81C784; text-align: right; font-family: monospace; }
-        #hud-zone-msg { position: absolute; top: 20%; width: 100%; text-align: center; font-size: 18px; color: #FFD700; text-shadow: 0 2px 4px #000; opacity: 0; transition: opacity 0.3s; }
+        #hud-hp-container {
+            position: absolute; top: 15px; right: 60px;
+            width: 220px; height: 28px;
+            background: #000; border: 2px solid #444;
+            border-radius: 2px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+        #hud-hp-fill {
+            width: 100%; height: 100%;
+            background: linear-gradient(180deg, #4CAF50, #2E7D32);
+            transition: width 0.2s;
+        }
+        #hud-hp-text {
+            position: absolute; top: 0; left: 0; width: 100%;
+            line-height: 28px; text-align: center; font-size: 14px;
+            color: #fff; text-shadow: 1px 1px 2px #000;
+        }
 
-        #pause-btn { position: absolute; top: 15px; right: 15px; cursor: pointer; font-size: 24px; line-height: 28px; width: 32px; height: 32px; text-align: center; background: rgba(0,0,0,0.5); border: 1px solid #666; border-radius: 4px; pointer-events: auto; }
+        #hud-cash {
+            position: absolute; top: 50px; right: 60px;
+            font-size: 20px; color: #81C784; text-align: right; font-family: monospace;
+        }
+
+        #hud-zone-msg {
+            position: absolute; top: 20%; width: 100%; text-align: center;
+            font-size: 18px; color: #FFD700; text-shadow: 0 2px 4px #000;
+            opacity: 0; transition: opacity 0.3s;
+        }
+
+        #pause-btn {
+            position: absolute; top: 15px; right: 15px;
+            cursor: pointer; font-size: 24px; line-height: 28px;
+            width: 32px; height: 32px; text-align: center;
+            background: rgba(0,0,0,0.5); border: 1px solid #666; border-radius: 4px;
+            pointer-events: auto;
+        }
 
         /* MANUAL FIRE BUTTON */
-        #btn-manual-fire { display: none; position: absolute; bottom: 20%; right: 15%; width: 90px; height: 90px; background: radial-gradient(circle, rgba(255, 80, 80, 0.6) 0%, rgba(200, 40, 40, 0.8) 100%); border: 3px solid rgba(255, 255, 255, 0.3); border-radius: 50%; pointer-events: auto; touch-action: manipulation; box-shadow: 0 4px 10px rgba(0,0,0,0.6); }
+        #btn-manual-fire {
+            display: none;
+            position: absolute; bottom: 20%; right: 15%;
+            width: 90px; height: 90px;
+            background: radial-gradient(circle, rgba(255, 80, 80, 0.6) 0%, rgba(200, 40, 40, 0.8) 100%);
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            pointer-events: auto; touch-action: manipulation;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+        }
         #btn-manual-fire:active { transform: scale(0.95); filter: brightness(1.2); }
 
         /* MODALS */
-        .fullscreen-modal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #111; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 50; pointer-events: auto; }
+        .fullscreen-modal {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #111;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 50; pointer-events: auto;
+        }
         h1 { margin: 0 0 20px 0; color: #ccc; text-transform: uppercase; letter-spacing: 4px; font-weight: 300; border-bottom: 1px solid #444; padding-bottom: 10px;}
-        .big-btn { padding: 15px 50px; font-size: 20px; background: linear-gradient(180deg, #333, #222); color: #ddd; border: 1px solid #555; border-radius: 2px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.5); touch-action: manipulation; text-transform: uppercase; letter-spacing: 1px; }
+        
+        .big-btn {
+            padding: 15px 50px; font-size: 20px;
+            background: linear-gradient(180deg, #333, #222);
+            color: #ddd; border: 1px solid #555; border-radius: 2px;
+            cursor: pointer; font-weight: bold;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            touch-action: manipulation;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
         .big-btn:active { background: #444; transform: translateY(2px); }
-        #loading-bar-container { width: 60%; height: 10px; background: #222; border: 1px solid #444; margin-top: 20px; display: none; }
+
+        #loading-bar-container {
+            width: 60%; height: 10px; background: #222; border: 1px solid #444; margin-top: 20px; display: none;
+        }
         #loading-bar-fill { width: 0%; height: 100%; background: #4CAF50; transition: width 0.1s; }
         #loading-text { color: #666; font-size: 12px; margin-top: 5px; min-height: 15px; visibility: hidden;}
 
         /* PAUSE MENU */
-        #pause-modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(30, 30, 30, 0.95); border: 1px solid #555; padding: 20px; text-align: center; min-width: 300px; max-height: 80vh; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.8); z-index: 20; pointer-events: auto; }
-        #pause-overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 10; pointer-events: auto; }
-        .modal-btn { display: block; width: 100%; margin: 8px 0; padding: 12px; background: #333; color: #ccc; border: 1px solid #555; cursor: pointer; font-family: inherit; font-size: 14px; touch-action: manipulation; }
+        #pause-modal {
+            display: none; position: absolute;
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(30, 30, 30, 0.95); border: 1px solid #555;
+            padding: 20px; text-align: center;
+            min-width: 300px; max-height: 80vh; overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            z-index: 20; pointer-events: auto;
+        }
+        #pause-overlay {
+            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.7); z-index: 10; pointer-events: auto; 
+        }
+        .modal-btn {
+            display: block; width: 100%; margin: 8px 0; padding: 12px;
+            background: #333; color: #ccc; border: 1px solid #555;
+            cursor: pointer; font-family: inherit; font-size: 14px;
+            touch-action: manipulation;
+        }
         .modal-btn.active { background: #2E7D32; color: #fff; border-color: #4CAF50; }
         .modal-desc { font-size: 11px; color: #888; margin-bottom: 10px; font-style: italic; }
         #btn-copy-log { display: none; }
         
-        /* DEBUG & CRASH */
-        #debug-overlay { display: none; position: absolute; bottom: 0; left: 0; width: 100%; height: 30%; background: rgba(0,0,0,0.8); color: #0f0; font-family: monospace; overflow-y: scroll; font-size: 11px; box-sizing: border-box; padding: 5px; z-index: 100; pointer-events: none; user-select: none; border-top: 1px solid #0f0; }
+        #debug-overlay {
+            display: none; position: absolute; bottom: 0; left: 0; width: 100%; height: 30%;
+            background: rgba(0,0,0,0.8); color: #0f0; font-family: monospace;
+            overflow-y: scroll; font-size: 11px; box-sizing: border-box; padding: 5px;
+            z-index: 100; pointer-events: none; user-select: none; border-top: 1px solid #0f0;
+        }
         #debug-overlay.interactive { pointer-events: auto; user-select: text; -webkit-user-select: text; }
-        #crash-screen { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #500; z-index: 10000; flex-direction: column; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; }
-        #crash-log { width: 90%; height: 50%; background: #200; color: #fff; border: 1px solid #f88; font-family: monospace; padding: 10px; margin-bottom: 20px; font-size: 10px; }
-        #btn-copy-crash { padding: 15px 30px; background: #fff; color: #900; border: none; font-weight: bold; cursor: pointer; }
+
+        /* CRASH SCREEN (RSOD) */
+        #crash-screen {
+            display: none; /* Flex when active */
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #500; z-index: 10000;
+            flex-direction: column; justify-content: center; align-items: center;
+            padding: 20px; box-sizing: border-box;
+        }
+        #crash-log {
+            width: 90%; height: 50%; background: #200; color: #fff;
+            border: 1px solid #f88; font-family: monospace; padding: 10px;
+            margin-bottom: 20px; font-size: 10px;
+        }
+        #btn-copy-crash {
+            padding: 15px 30px; background: #fff; color: #900; border: none; font-weight: bold; cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -80,8 +196,14 @@
     </div>
 
     <div id="ui-layer">
-        <div id="top-left-info"><span id="version-display">v23</span> <span id="fps-counter">FPS: --</span></div>
-        <div id="hud-hp-container"><div id="hud-hp-fill"></div><div id="hud-hp-text">5/5</div></div>
+        <div id="top-left-info">
+            <span id="version-display">v24</span>
+            <span id="fps-counter">FPS: --</span>
+        </div>
+        <div id="hud-hp-container">
+            <div id="hud-hp-fill"></div>
+            <div id="hud-hp-text">5/5</div>
+        </div>
         <div id="hud-cash">$0</div>
         <div id="hud-zone-msg"></div>
         <div id="pause-btn">&#10074;&#10074;</div>
@@ -107,9 +229,12 @@
     </div>
 
     <script>
-        /** TTR ENGINE v23 - Strict Linear Ordering & Loop Guards */
+        /** 
+         * TTR ENGINE v24
+         * Fixes: Async Loading (Prevents Freeze), Crash Reporter, Linear Order
+         */
 
-        // --- 1. CRASH REPORTER & CONSOLE ---
+        // --- 1. CONSOLE BRIDGE & CRASH UI ---
         const DEBUG_LOG = [];
         const originalLog = console.log;
         const originalWarn = console.warn;
@@ -151,8 +276,26 @@
             return false;
         };
 
+        window.addEventListener('DOMContentLoaded', () => {
+            const btn = document.getElementById('btn-copy-crash');
+            if (btn) {
+                btn.onclick = () => {
+                    const text = document.getElementById('crash-log').value;
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(text).then(() => alert("Copied to clipboard"));
+                    } else {
+                        const textArea = document.getElementById('crash-log');
+                        textArea.focus();
+                        textArea.select();
+                        document.execCommand('copy');
+                        alert("Copied (Legacy Mode)");
+                    }
+                };
+            }
+        });
+
         // --- 2. CONFIG & STATE ---
-        const VERSION = "v23";
+        const VERSION = "v24";
         const SETTINGS_KEY = "TTR_SETTINGS";
         const SAVE_KEY = "TTR_SAVE_DATA";
         const CONFIG = {
@@ -203,6 +346,12 @@
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
             if (!STATE.gameStarted) { CAMERA.x = PLAYER.x - canvas.width/2; CAMERA.y = PLAYER.y - canvas.height/2; }
+        }
+        function resetInputs() {
+            INPUT.keys = {}; INPUT.mouse.down = false; 
+            INPUT.touches.leftId = null; INPUT.touches.rightId = null; 
+            INPUT.moveVector = {x:0,y:0}; INPUT.isFiring = false; 
+            STATE.manualFirePressed = false;
         }
         function mulberry32(a) {
             return function() {
@@ -307,15 +456,9 @@
         }
 
         // --- 7. INPUT HELPERS ---
-        function resetInputs() {
-            INPUT.keys = {}; INPUT.mouse.down = false; 
-            INPUT.touches.leftId = null; INPUT.touches.rightId = null; 
-            INPUT.moveVector = {x:0,y:0}; INPUT.isFiring = false; 
-            STATE.manualFirePressed = false;
-        }
         function updateManualFireButton() {
             const btn = document.getElementById('btn-manual-fire');
-            btn.style.display = (STATE.isMobile && STATE.autoFireMode === 2 && !STATE.tapToFire) ? 'block' : 'none';
+            if(btn) btn.style.display = (STATE.isMobile && STATE.autoFireMode === 2 && !STATE.tapToFire) ? 'block' : 'none';
         }
 
         // --- 8. ENTITY HELPERS ---
@@ -452,95 +595,6 @@
             }
         }
 
-        function checkShops() {
-            let onShop = false;
-            for (let s of SHOPS) {
-                if (PLAYER.x > s.x && PLAYER.x < s.x + s.w && PLAYER.y > s.y && PLAYER.y < s.y + s.h) {
-                    onShop = true;
-                    // Track entry to allow drive-off/drive-on
-                    if (!s._wasOn) {
-                        s._wasOn = true;
-                        if (!s.unlocked) {
-                            if (PLAYER.cash >= s.price) {
-                                PLAYER.cash -= s.price; s.unlocked = true;
-                                if (s.type === 'cash') PLAYER.passiveIncome += 0.1;
-                                playSound('pickup');
-                            } else showZoneMsg(`Unlock: ${formatMoney(s.price)}`);
-                        } else {
-                            let nextTier;
-                            if (s.type === 'cash' && s.tier < TIERS.cash.length - 1) nextTier = TIERS.cash[s.tier + 1];
-                            else if (s.type === 'med' && s.tier < TIERS.med.length - 1) nextTier = TIERS.med[s.tier + 1];
-
-                            if (nextTier) {
-                                if (PLAYER.cash >= nextTier.price) {
-                                    PLAYER.cash -= nextTier.price;
-                                    s.tier++;
-                                    if (s.type === 'cash') PLAYER.passiveIncome = nextTier.rate;
-                                    playSound('pickup');
-                                } else showZoneMsg(`Upgrade T${s.tier+1}: ${formatMoney(nextTier.price)}`);
-                            }
-                        }
-                    }
-                    if (s.type === 'med' && s.unlocked) {
-                        const healRate = TIERS.med[s.tier].rate;
-                        if (PLAYER.hp < PLAYER.maxHp) PLAYER.hp = Math.min(PLAYER.maxHp, PLAYER.hp + (healRate * 0.2));
-                    }
-                } else {
-                    s._wasOn = false;
-                }
-            }
-            if (!onShop) document.getElementById('hud-zone-msg').style.opacity = 0;
-        }
-
-        function updateEntities(dt) {
-            for (let i = ENEMIES.length - 1; i >= 0; i--) {
-                let e = ENEMIES[i];
-                if (Math.hypot(PLAYER.x - e.x, PLAYER.y - e.y) < 600) {
-                    e.angle = Math.atan2(PLAYER.y - e.y, PLAYER.x - e.x);
-                    if (e.cooldown > 0) e.cooldown -= dt;
-                    if (e.cooldown <= 0) { fireWeapon(e, 'enemy'); e.cooldown = 1.5 + Math.random(); }
-                }
-            }
-            for (let i = BULLETS.length - 1; i >= 0; i--) {
-                let b = BULLETS[i];
-                b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
-                let hit = false;
-                if (b.owner === 'player') {
-                    for (let j = ENEMIES.length - 1; j >= 0; j--) {
-                        let e = ENEMIES[j];
-                        if (Math.hypot(b.x - e.x, b.y - e.y) < 25) {
-                            e.hp--; hit = true; playSound('hit_enemy');
-                            if (e.hp <= 0) { dropLoot(e.x, e.y); ENEMIES.splice(j, 1); }
-                            break;
-                        }
-                    }
-                } else if (b.owner === 'enemy') {
-                    if (Math.hypot(b.x - PLAYER.x, b.y - PLAYER.y) < 25) {
-                        PLAYER.hp--; updateHUD(); hit = true; playSound('hit_player');
-                        if (PLAYER.hp <= 0) doGameOver();
-                    }
-                }
-                if (b.life <= 0 || hit) BULLETS.splice(i, 1);
-            }
-            for (let i = LOOT.length - 1; i >= 0; i--) {
-                let l = LOOT[i];
-                if (Math.hypot(PLAYER.x - l.x, PLAYER.y - l.y) < 30) {
-                    playSound('pickup');
-                    if (l.type === 0 && PLAYER.hp < PLAYER.maxHp) PLAYER.hp = Math.min(PLAYER.maxHp, PLAYER.hp + 1);
-                    else if (l.type === 1) PLAYER.cash += 1;
-                    else if (l.type === 2) PLAYER.cash += 5;
-                    else if (l.type === 3) PLAYER.cash += l.value;
-                    updateHUD();
-                    LOOT.splice(i, 1);
-                }
-            }
-            for (let i = PARTICLES.length - 1; i >= 0; i--) {
-                let p = PARTICLES[i];
-                p.life -= dt;
-                if (p.life <= 0) PARTICLES.splice(i, 1);
-            }
-        }
-
         // --- 10. RENDER HELPERS ---
         function drawTank(x, y, angle, bodyColor, turretColor, isPlayer, turretAngle) {
             ctx.save(); ctx.translate(x, y);
@@ -670,7 +724,7 @@
                 requestAnimationFrame(gameLoop);
             } catch (e) {
                 console.error("LOOP CRASH", e);
-                STATE.gameStarted = false; // Stop loop
+                STATE.gameStarted = false;
                 alert("GAME CRASHED: " + e.message);
             }
         }
@@ -779,16 +833,141 @@
             document.body.removeChild(textArea);
         }
 
-        function togglePause(pause) {
-            STATE.isPaused = pause;
-            document.getElementById('pause-modal').style.display = pause ? 'block' : 'none';
-            document.getElementById('pause-overlay').style.display = pause ? 'block' : 'none';
-            if (!pause) STATE.lastTime = performance.now();
+        // --- 13. WORLD GEN ---
+        // (Async Chunked Generation)
+        function startGeneration() {
+            const size = CONFIG.worldSize;
+            const TEMP_MAP = new Uint8Array(size * size);
+            worldCanvas = document.createElement('canvas');
+            worldCanvas.width = size;
+            worldCanvas.height = size;
+            const wCtx = worldCanvas.getContext('2d', { willReadFrequently: true });
+
+            wCtx.fillStyle = CONFIG.colors.land;
+            wCtx.fillRect(0, 0, size, size);
+
+            const noiseScale = 0.003;
+            
+            function processNoise(y) {
+                try {
+                    const chunkSize = 100;
+                    for (let row = 0; row < chunkSize; row++) {
+                        if (y + row >= size) break;
+                        const cy = y + row;
+                        for (let cx = 0; cx < size; cx++) {
+                            const pIdx = cy * size + cx;
+                            let n = Noise.perlin2(cx * noiseScale, cy * noiseScale);
+                            n += 0.5 * Noise.perlin2(cx * noiseScale * 3, cy * noiseScale * 3);
+                            if (n < -0.25) TEMP_MAP[pIdx] = 1;
+                            else if (n < -0.15) TEMP_MAP[pIdx] = 3;
+                            else TEMP_MAP[pIdx] = 0;
+                        }
+                    }
+                    y += chunkSize;
+                    const pct = Math.min(100, Math.round((y / size) * 40));
+                    document.getElementById('loading-bar-fill').style.width = pct + "%";
+                    if (y < size) requestAnimationFrame(() => processNoise(y));
+                    else { PHYSICS_MAP = TEMP_MAP; processDespeckle(0, wCtx); }
+                } catch(e) { console.error("Noise Gen Error", e); }
+            }
+            processNoise(0);
         }
 
-        // --- 13. WORLD GEN ---
-        // (Moved up for clarity in TS but kept here in strict order for delivery)
-        // Note: Already defined above as block 10
+        function processDespeckle(y, wCtx) {
+            try {
+                const size = CONFIG.worldSize;
+                const chunkSize = 100;
+                for (let row = 0; row < chunkSize; row++) {
+                    if (y + row >= size - 1) break;
+                    const cy = y + row;
+                    if (cy === 0) continue;
+                    for (let cx = 1; cx < size - 1; cx++) {
+                        const idx = cy * size + cx;
+                        const type = PHYSICS_MAP[idx];
+                        if (type === 1 || type === 3) {
+                            let neighbors = 0;
+                            for (let dy = -1; dy <= 1; dy++) {
+                                for (let dx = -1; dx <= 1; dx++) {
+                                    if (PHYSICS_MAP[(cy+dy)*size + (cx+dx)] === type) neighbors++;
+                                }
+                            }
+                            if (neighbors < 5) PHYSICS_MAP[idx] = 0;
+                        }
+                    }
+                }
+                y += chunkSize;
+                const pct = 40 + Math.min(100, Math.round((y / size) * 30));
+                document.getElementById('loading-bar-fill').style.width = pct + "%";
+                document.getElementById('loading-text').innerText = "Smoothing Terrain...";
+                if (y < size) requestAnimationFrame(() => processDespeckle(y, wCtx));
+                else processRender(0, wCtx);
+            } catch(e) { console.error("Despeckle Error", e); }
+        }
+
+        function processRender(y, wCtx) {
+            try {
+                const size = CONFIG.worldSize;
+                const chunkSize = 100;
+                const imgData = wCtx.getImageData(0, y, size, chunkSize);
+                const data = imgData.data;
+
+                for (let row = 0; row < chunkSize; row++) {
+                    if (y + row >= size) break;
+                    const cy = y + row;
+                    for (let cx = 0; cx < size; cx++) {
+                        const idx = (row * size + cx) * 4;
+                        const pIdx = cy * size + cx;
+                        const type = PHYSICS_MAP[pIdx];
+                        if (type === 1) { data[idx]=26; data[idx+1]=38; data[idx+2]=47; data[idx+3]=255; }
+                        else if (type === 3) { 
+                            const grit = (rng() - 0.5) * 20;
+                            data[idx]=210+grit; data[idx+1]=180+grit; data[idx+2]=140+grit; data[idx+3]=255; 
+                        } else {
+                            const grit = (rng() - 0.5) * 20;
+                            data[idx]=75+grit; data[idx+1]=83+grit; data[idx+2]=32+grit; data[idx+3]=255;
+                        }
+                    }
+                }
+                wCtx.putImageData(imgData, 0, y);
+                y += chunkSize;
+                const pct = 70 + Math.min(100, Math.round((y / size) * 30));
+                document.getElementById('loading-bar-fill').style.width = pct + "%";
+                document.getElementById('loading-text').innerText = "Rendering World...";
+                
+                if (y < size) requestAnimationFrame(() => processRender(y, wCtx));
+                else finishGeneration(wCtx);
+            } catch(e) { console.error("Render Error", e); }
+        }
+
+        function finishGeneration(wCtx) {
+            const center = CONFIG.worldSize / 2;
+            const baseSize = 300;
+            wCtx.fillStyle = '#555'; wCtx.fillRect(center - baseSize/2, center - baseSize/2, baseSize, baseSize);
+            wCtx.fillStyle = "rgba(255,255,255,0.3)"; wCtx.font = "bold 40px Arial"; wCtx.textAlign = "center";
+            wCtx.fillText("MED BAY", center - 50, center - 90); wCtx.fillText("CASH BAY", center + 50, center - 90);
+
+            for(let by = center - baseSize/2; by < center + baseSize/2; by++) {
+                for(let bx = center - baseSize/2; bx < center + baseSize/2; bx++) {
+                    PHYSICS_MAP[Math.floor(by)*CONFIG.worldSize + Math.floor(bx)] = 2;
+                }
+            }
+            
+            const baseImg = wCtx.getImageData(center - baseSize/2, center - baseSize/2, baseSize, baseSize);
+            for(let i=0; i<baseImg.data.length; i+=4) {
+                const n = rng() * 20;
+                baseImg.data[i] = 80 + n; baseImg.data[i+1] = 80 + n; baseImg.data[i+2] = 80 + n; baseImg.data[i+3] = 255;
+            }
+            wCtx.putImageData(baseImg, center - baseSize/2, center - baseSize/2);
+
+            console.log("Generation Complete");
+            STATE.worldReady = true;
+            if (STATE.startOnLoad) startGame();
+            else {
+                document.getElementById('loading-bar-container').style.display = 'none';
+                document.getElementById('loading-text').style.visibility = 'hidden';
+                document.getElementById('btn-start').style.display = 'block';
+            }
+        }
 
         // --- 14. INIT ---
         window.initGame = function() {
@@ -798,13 +977,13 @@
             window.addEventListener('resize', resize);
             
             document.getElementById('loading-bar-container').style.display = 'block';
-            setTimeout(generateWorld, 50);
+            // Start Async Gen
+            startGeneration();
 
             document.getElementById('btn-start').onclick = () => {
                 initAudio();
-                if (STATE.worldReady) {
-                    startGame();
-                } else {
+                if (STATE.worldReady) startGame();
+                else {
                     STATE.startOnLoad = true;
                     document.getElementById('btn-start').style.display = 'none';
                     document.getElementById('loading-bar-container').style.display = 'block';
@@ -826,9 +1005,7 @@
             try {
                 if (window.initGame) window.initGame();
                 else throw new Error("initGame not found");
-            } catch (e) {
-                console.error("BOOTSTRAP ERROR", e);
-            }
+            } catch (e) { console.error("BOOTSTRAP ERROR", e); }
         });
 
     </script>
