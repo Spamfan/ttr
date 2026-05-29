@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TTR v26</title>
+    <title>TTR v27</title>
     <link rel="icon" href="data:,">
     <style>
         /* CORE STYLES */
@@ -197,7 +197,7 @@
 
     <div id="ui-layer">
         <div id="top-left-info">
-            <span id="version-display">v26</span>
+            <span id="version-display">v27</span>
             <span id="fps-counter">FPS: --</span>
         </div>
         <div id="hud-hp-container">
@@ -230,8 +230,8 @@
 
     <script>
         /** 
-         * TTR ENGINE v26
-         * Fixes: checkShops, updateEntities, and togglePause
+         * TTR ENGINE v27
+         * Fixes: Android generation load times, left joystick infinite movement bug, temporarily disabled enemies and shops.
          */
 
         // --- 1. CONSOLE BRIDGE & CRASH UI ---
@@ -291,7 +291,7 @@
         });
 
         // --- 2. CONFIG & STATE ---
-        const VERSION = "v26";
+        const VERSION = "v27";
         const SETTINGS_KEY = "TTR_SETTINGS";
         const SAVE_KEY = "TTR_SAVE_DATA";
         const CONFIG = {
@@ -623,7 +623,10 @@
                         const power = Math.min(dist, 50) / 50;
                         INPUT.moveVector = { x: (dx/dist)*power, y: (dy/dist)*power };
                     }
+                } else {
+                    INPUT.moveVector = { x: 0, y: 0 };
                 }
+                
                 if (INPUT.touches.rightId !== null) {
                     const start = INPUT.touches.rightStart;
                     const curr = INPUT.touches.rightCurr;
@@ -803,9 +806,9 @@
             
             shopTimer += dt;
             if (PLAYER.passiveIncome > 0) PLAYER.cash += PLAYER.passiveIncome * dt;
-            if (shopTimer >= 0.2) { shopTimer = 0; updateHUD(); checkShops(); }
+            if (shopTimer >= 0.2) { shopTimer = 0; updateHUD(); /* checkShops(); */ }
             enemySpawnTimer += dt;
-            if (enemySpawnTimer > 5) { enemySpawnTimer = 0; if (ENEMIES.length < 5) spawnEnemy(); }
+            // if (enemySpawnTimer > 5) { enemySpawnTimer = 0; if (ENEMIES.length < 5) spawnEnemy(); }
             saveTimer += dt;
             if (saveTimer > 10) { saveTimer = 0; saveGame(); }
 
@@ -819,6 +822,7 @@
             ctx.translate(-CAMERA.x, -CAMERA.y);
             ctx.drawImage(worldCanvas, 0, 0);
 
+            /*
             for (let s of SHOPS) {
                 if (s.unlocked) { ctx.shadowBlur = 15; ctx.shadowColor = s.id === 'med' ? '#f00' : '#0f0'; }
                 ctx.fillStyle = s.color; ctx.fillRect(s.x, s.y, s.w, s.h);
@@ -826,6 +830,7 @@
                 ctx.fillText(s.icon, s.x + s.w/2, s.y + s.h/2 + 10);
                 if (!s.unlocked) { ctx.font = "bold 14px Arial"; ctx.fillStyle = "#FFD700"; ctx.fillText("$"+s.price, s.x + s.w/2, s.y - 10); }
             }
+            */
 
             for (let l of LOOT) {
                 ctx.save(); ctx.translate(l.x, l.y); ctx.shadowBlur = 10;
@@ -1036,7 +1041,7 @@
             
             function processNoise(y) {
                 try {
-                    const chunkSize = 100;
+                    const chunkSize = 800;
                     for (let row = 0; row < chunkSize; row++) {
                         if (y + row >= size) break;
                         const cy = y + row;
@@ -1062,7 +1067,7 @@
         function processDespeckle(y, wCtx) {
             try {
                 const size = CONFIG.worldSize;
-                const chunkSize = 100;
+                const chunkSize = 800;
                 for (let row = 0; row < chunkSize; row++) {
                     if (y + row >= size - 1) break;
                     const cy = y + row;
@@ -1093,8 +1098,8 @@
         function processRender(y, wCtx) {
             try {
                 const size = CONFIG.worldSize;
-                const chunkSize = 100;
-                const imgData = wCtx.getImageData(0, y, size, chunkSize);
+                const chunkSize = 800;
+                const imgData = wCtx.getImageData(0, y, size, Math.min(chunkSize, size - y));
                 const data = imgData.data;
 
                 for (let row = 0; row < chunkSize; row++) {
@@ -1128,6 +1133,8 @@
         function finishGeneration(wCtx) {
             const center = CONFIG.worldSize / 2;
             const baseSize = 300;
+            
+            /*
             wCtx.fillStyle = '#555'; wCtx.fillRect(center - baseSize/2, center - baseSize/2, baseSize, baseSize);
             wCtx.fillStyle = "rgba(255,255,255,0.3)"; wCtx.font = "bold 40px Arial"; wCtx.textAlign = "center";
             wCtx.fillText("MED BAY", center - 50, center - 90); wCtx.fillText("CASH BAY", center + 50, center - 90);
@@ -1144,6 +1151,7 @@
                 baseImg.data[i] = 80 + n; baseImg.data[i+1] = 80 + n; baseImg.data[i+2] = 80 + n; baseImg.data[i+3] = 255;
             }
             wCtx.putImageData(baseImg, center - baseSize/2, center - baseSize/2);
+            */
 
             console.log("Generation Complete");
             STATE.worldReady = true;
