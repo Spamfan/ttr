@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TTR v29 (Delivery 1)</title>
+    <title>TTR v28</title>
     <link rel="icon" href="data:,">
     <style>
         /* CORE STYLES */
@@ -19,23 +19,7 @@
             -webkit-user-select: none;
         }
 
-        canvas { 
-            display: block; 
-            cursor: crosshair; /* PC Polish: Crosshair for aiming */
-        }
-
-        /* BOOT SPLASH SCREEN */
-        #boot-splash {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #000; color: #fff; z-index: 99999;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            font-family: monospace; font-size: 24px; letter-spacing: 2px;
-        }
-        .spinner {
-            width: 40px; height: 40px; border: 4px solid #333; border-top: 4px solid #4CAF50;
-            border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        canvas { display: block; }
 
         /* UI OVERLAY */
         #ui-layer {
@@ -77,7 +61,7 @@
             color: #fff; text-shadow: 1px 1px 2px #000;
         }
 
-        /* INVENTORY */
+        /* INVENTORY (Replaces Cash) */
         #hud-inventory {
             position: absolute; top: 50px; right: 60px;
             background: rgba(0,0,0,0.7); padding: 8px 12px;
@@ -112,14 +96,13 @@
         /* ZOOM BUTTON */
         #btn-zoom {
             position: absolute; bottom: 20px; left: 20px;
-            width: 60px; height: 60px; border-radius: 50%;
+            width: 50px; height: 50px; border-radius: 50%;
             background: rgba(0,0,0,0.6); border: 2px solid #666;
-            display: flex; justify-content: center; align-items: center; flex-direction: column;
+            display: flex; justify-content: center; align-items: center;
             font-size: 24px; pointer-events: auto; cursor: pointer;
             box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
         #btn-zoom:active { transform: scale(0.9); }
-        .btn-hint { font-size: 10px; color: #aaa; margin-top: -2px; }
 
         /* MANUAL FIRE BUTTON */
         #btn-manual-fire {
@@ -168,13 +151,13 @@
         }
         #placement-ui button { pointer-events: auto; font-size: 16px; padding: 15px 30px; }
 
-        /* PAUSE MENU (TABBED) */
+        /* PAUSE MENU */
         #pause-modal {
             display: none; position: absolute;
             top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: rgba(30, 30, 30, 0.95); border: 1px solid #555;
             padding: 20px; text-align: center;
-            width: 350px; max-height: 80vh; overflow-y: auto;
+            min-width: 300px; max-height: 80vh; overflow-y: auto;
             box-shadow: 0 10px 30px rgba(0,0,0,0.8);
             z-index: 20; pointer-events: auto;
         }
@@ -182,45 +165,25 @@
             display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.7); z-index: 10; pointer-events: auto; 
         }
-        
-        .tab-header { display: flex; justify-content: space-between; border-bottom: 2px solid #444; margin-bottom: 15px; }
-        .tab-btn { flex: 1; padding: 10px 0; background: none; border: none; color: #888; cursor: pointer; font-weight: bold; }
-        .tab-btn.active { color: #4CAF50; border-bottom: 2px solid #4CAF50; margin-bottom: -2px; }
-        .tab-content { display: none; text-align: left; }
-        .tab-content.active { display: block; }
-
         .modal-btn {
             display: block; width: 100%; margin: 8px 0; padding: 12px;
             background: #333; color: #ccc; border: 1px solid #555;
             cursor: pointer; font-family: inherit; font-size: 14px;
-            touch-action: manipulation; text-align: center;
+            touch-action: manipulation;
         }
         .modal-btn.active { background: #2E7D32; color: #fff; border-color: #4CAF50; }
-        .modal-desc { font-size: 11px; color: #888; margin-bottom: 10px; font-style: italic; text-align: center;}
+        .modal-desc { font-size: 11px; color: #888; margin-bottom: 10px; font-style: italic; }
+        #btn-copy-log { display: none; }
         
-        /* SLIDERS */
-        .slider-group { margin-bottom: 15px; }
-        .slider-label { display: flex; justify-content: space-between; font-size: 12px; color: #ccc; margin-bottom: 5px; }
-        input[type=range] { width: 100%; margin: 0; }
-
         #debug-overlay {
             display: none; position: absolute; bottom: 0; left: 0; width: 100%; height: 30%;
             background: rgba(0,0,0,0.8); color: #0f0; font-family: monospace;
             overflow-y: scroll; font-size: 11px; box-sizing: border-box; padding: 5px;
             z-index: 100; pointer-events: none; user-select: none; border-top: 1px solid #0f0;
         }
+        #debug-overlay.interactive { pointer-events: auto; user-select: text; -webkit-user-select: text; }
 
-        /* INVENTORY EXPANDED GRID */
-        .inv-grid {
-            display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
-            margin-top: 20px; margin-bottom: 20px; width: 80%; max-width: 400px;
-        }
-        .inv-slot {
-            background: rgba(0,0,0,0.5); border: 1px solid #444; aspect-ratio: 1;
-            display: flex; justify-content: center; align-items: center; color: #888;
-        }
-
-        /* CRASH SCREEN */
+        /* CRASH SCREEN (RSOD) */
         #crash-screen {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #500; z-index: 10000; flex-direction: column; justify-content: center; align-items: center;
@@ -236,12 +199,6 @@
 </head>
 <body>
 
-    <!-- BOOT SPLASH SCREEN -->
-    <div id="boot-splash">
-        <div class="spinner"></div>
-        <div>INITIALIZING ENGINE...</div>
-    </div>
-
     <canvas id="gameCanvas"></canvas>
 
     <!-- CRASH SCREEN -->
@@ -253,7 +210,7 @@
     </div>
 
     <!-- START SCREEN -->
-    <div id="start-screen" class="fullscreen-modal" style="display:none;">
+    <div id="start-screen" class="fullscreen-modal">
         <h1>Tank Tycoon</h1>
         <button id="btn-start" class="big-btn">INITIALIZE</button>
         <div id="loading-bar-container"><div id="loading-bar-fill"></div></div>
@@ -266,24 +223,17 @@
         <button id="btn-respawn" class="big-btn" style="background: #500; border-color: #f00;">REDEPLOY</button>
     </div>
 
-    <!-- CRAFTING / INVENTORY MENU -->
+    <!-- CRAFTING MENU -->
     <div id="crafting-modal" class="fullscreen-modal" style="display:none;">
-        <h1>INVENTORY & CRAFTING</h1>
-        <p id="craft-parts-display" style="font-size:24px; color:#fff; font-family:monospace; margin-bottom:10px;">Parts: 0 🔩</p>
-        
-        <!-- Future-proofing Inventory Grid -->
-        <div id="expanded-inventory-grid" class="inv-grid">
-            <div class="inv-slot"></div><div class="inv-slot"></div><div class="inv-slot"></div><div class="inv-slot"></div>
-            <div class="inv-slot"></div><div class="inv-slot"></div><div class="inv-slot"></div><div class="inv-slot"></div>
-        </div>
-
+        <h1>CRAFTING</h1>
+        <p id="craft-parts-display" style="font-size:24px; color:#fff; font-family:monospace; margin-bottom:40px;">Parts: 0 🔩</p>
         <button id="btn-craft-base" class="big-btn" style="border-color:#4CAF50;">CRAFT BASE HUB (10 🔩)</button>
         <button id="btn-close-crafting" class="big-btn" style="margin-top:20px; background:#500; border-color:#f00;">CLOSE</button>
     </div>
 
     <div id="ui-layer">
         <div id="top-left-info">
-            <span id="version-display">v29</span>
+            <span id="version-display">v28</span>
             <span id="fps-counter">FPS: --</span>
         </div>
         
@@ -300,10 +250,7 @@
         <div id="hud-zone-msg"></div>
         <div id="pause-btn">&#10074;&#10074;</div>
         
-        <div id="btn-zoom">
-            <span>🔍</span>
-            <span id="hint-zoom" class="btn-hint" style="display:none;">[Z]</span>
-        </div>
+        <div id="btn-zoom">🔍</div>
         <div id="btn-manual-fire"></div>
 
         <div id="placement-ui">
@@ -313,71 +260,33 @@
 
         <div id="pause-overlay"></div>
         <div id="pause-modal">
-            <div class="tab-header">
-                <button class="tab-btn active" onclick="switchTab('tab-game')">GAME</button>
-                <button class="tab-btn" onclick="switchTab('tab-world')">WORLD</button>
-                <button class="tab-btn" onclick="switchTab('tab-debug')">DEBUG</button>
-            </div>
-
-            <div id="tab-game" class="tab-content active">
-                <button id="btn-toggle-fps" class="modal-btn active">Show FPS: ON</button>
-                <button id="btn-auto-fire" class="modal-btn active">Auto-Fire: ANY</button>
-                <div id="autofire-desc" class="modal-desc">Fires when right stick is touched.</div>
-                <button id="btn-static-joy" class="modal-btn">Static Joysticks: OFF</button>
-                <div class="modal-desc">Fixes controls to bottom corners.</div>
-                <button id="btn-tap-fire" class="modal-btn">Tap to Fire: OFF</button>
-                <div class="modal-desc">Tap screen to aim & shoot (Mobile).</div>
-            </div>
-
-            <div id="tab-world" class="tab-content">
-                <div class="slider-group">
-                    <div class="slider-label"><span>Water Threshold</span><span id="val-water">-0.25</span></div>
-                    <input type="range" id="slider-water" min="-0.5" max="0" step="0.01" value="-0.25">
-                </div>
-                <div class="slider-group">
-                    <div class="slider-label"><span>Sand Threshold</span><span id="val-sand">-0.15</span></div>
-                    <input type="range" id="slider-sand" min="-0.4" max="0.2" step="0.01" value="-0.15">
-                </div>
-                <div class="slider-group">
-                    <div class="slider-label"><span>Biome Scale (Patchiness)</span><span id="val-noise">0.003</span></div>
-                    <input type="range" id="slider-noise" min="0.001" max="0.01" step="0.001" value="0.003">
-                </div>
-                <div class="slider-group">
-                    <div class="slider-label"><span>Floor Loot Density</span><span id="val-loot">150</span></div>
-                    <input type="range" id="slider-loot" min="0" max="500" step="10" value="150">
-                </div>
-                <div class="slider-group">
-                    <div class="slider-label"><span>Enemy Max Cap</span><span id="val-enemies">5</span></div>
-                    <input type="range" id="slider-enemies" min="0" max="20" step="1" value="5">
-                </div>
-                <button id="btn-regen-world" class="modal-btn" style="background: #2E7D32; border-color: #4CAF50;">APPLY & REGENERATE</button>
-                
-                <hr style="border-color:#444; margin: 15px 0;">
-                <button id="btn-clear-settings" class="modal-btn" style="border-color:#884444; color:#daa;">Clear Settings</button>
-                <button id="btn-start-over" class="modal-btn" style="border-color:#f00; color:#f88;">Start Over (Wipe All)</button>
-            </div>
-
-            <div id="tab-debug" class="tab-content">
-                <button id="btn-toggle-debug" class="modal-btn">Show Live Debug: OFF</button>
-                <button id="btn-copy-log" class="modal-btn" style="display:none;">Copy Log</button>
-            </div>
-
-            <button id="btn-close-pause" class="modal-btn" style="background: #500; border-color: #800; margin-top: 20px;">RESUME [ESC]</button>
+            <h3 style="color:#ccc; margin-top:0;">SYSTEM PAUSED</h3>
+            <button id="btn-toggle-fps" class="modal-btn active">Show FPS: ON</button>
+            <button id="btn-auto-fire" class="modal-btn active">Auto-Fire: ANY</button>
+            <div id="autofire-desc" class="modal-desc">Fires when right stick is touched.</div>
+            <button id="btn-static-joy" class="modal-btn">Static Joysticks: OFF</button>
+            <div class="modal-desc">Fixes controls to bottom corners.</div>
+            <button id="btn-tap-fire" class="modal-btn">Tap to Fire: OFF</button>
+            <div class="modal-desc">Tap screen to aim & shoot (Mobile).</div>
+            <button id="btn-toggle-debug" class="modal-btn">Show Live Debug: OFF</button>
+            <button id="btn-copy-log" class="modal-btn">Copy Log</button>
+            <hr style="border-color:#444; margin: 15px 0;">
+            <button id="btn-clear-settings" class="modal-btn" style="border-color:#884444; color:#daa;">Clear Settings</button>
+            <button id="btn-start-over" class="modal-btn" style="border-color:#f00; color:#f88;">Start Over</button>
+            <button id="btn-close-pause" class="modal-btn" style="background: #500; border-color: #800; margin-top: 20px;">RESUME</button>
         </div>
         <div id="debug-overlay"></div>
     </div>
 
     <script>
         /** 
-         * TTR ENGINE v29 (Delivery 1)
-         * - Boot Splash Screen to hide heavy JS parsing
-         * - Tabbed Pause Menu & World Config Sliders
-         * - PC Hotkeys (Z, I, Escape, Space), Crosshair, Dynamic Zoom
-         * - Future Proofing: PLAYER.stats, STRUCTURES array, Expanded Inventory
+         * TTR ENGINE v28
+         * Fixes: Android generation load times, left joystick infinite movement bug, temporarily disabled enemies and shops.
+         * New: Zoom toggle, seeded Parts (🔩) floor loot, persistent inventory, Base Hub crafting & placement.
          */
 
         // --- 1. CONSOLE BRIDGE & CRASH UI ---
-        const DEBUG_LOG = [];
+        const DEBUG_LOG =[];
         const originalLog = console.log;
         const originalWarn = console.warn;
         const originalError = console.error;
@@ -407,7 +316,6 @@
             }
         }
 
-        function log(msg) { console.log(msg); }
         console.log = function(...args) { originalLog.apply(console, args); logToOverlay(args.join(' '), 'info'); };
         console.warn = function(...args) { originalWarn.apply(console, args); logToOverlay(args.join(' '), 'warn'); };
         console.error = function(...args) { originalError.apply(console, args); logToOverlay(args.join(' '), 'error'); };
@@ -434,32 +342,18 @@
         });
 
         // --- 2. CONFIG & STATE ---
-        const VERSION = "v29";
+        const VERSION = "v28";
         const SETTINGS_KEY = "TTR_SETTINGS";
         const SAVE_KEY = "TTR_SAVE_DATA";
-        const WORLD_CONFIG_KEY = "TTR_WORLD_CONFIG";
-        
-        let WORLD_CONFIG = {
-            waterThreshold: -0.25,
-            sandThreshold: -0.15,
-            noiseScale: 0.003,
-            lootDensity: 150,
-            maxEnemies: 5
-        };
-
-        const ITEM_REGISTRY = {}; // Future proofing for actual items
-
         const CONFIG = {
             worldSize: 3200,
             colors: { land: '#4b5320', landNoise: '#3e4418', waterDeep: '#1a262f', waterShallow: '#2b3e4d', sand: '#d2b48c', sandNoise: '#c2a47c', concrete: '#555555', tankBody: '#37474F', tankTurret: '#546E7A', enemyBody: '#8D6E63' },
-            waterSpeedMult: 0.3, sandSpeedMult: 0.5, bulletSpeed: 700, bulletLife: 1.5, joystickDeadzone: 0.2, cameraDamping: 10
+            playerSpeed: 250, waterSpeedMult: 0.3, sandSpeedMult: 0.5, fireRate: 1.0, bulletSpeed: 700, bulletLife: 1.5, joystickDeadzone: 0.2, cameraDamping: 10
         };
-
         const TIERS = {
             cash:[{price:10,rate:0.1},{price:50,rate:0.25},{price:500,rate:1.0},{price:2500,rate:5.0},{price:5000,rate:10.0},{price:25000,rate:100.0},{price:100000,rate:500.0},{price:500000,rate:2500.0},{price:5000000,rate:5000.0},{price:25000000,rate:25000.0}],
             med:[{price:100,rate:1},{price:500,rate:2},{price:1000,rate:3}]
         };
-
         const STATE = {
             worldReady: false, startOnLoad: false, gameStarted: false, gameOver: false, lastTime: 0, 
             showFPS: true, showDebug: false, autoFireMode: 0, staticJoysticks: false, tapToFire: false,
@@ -479,37 +373,20 @@
         })();
 
         // --- 4. UTILS & GLOBALS ---
-        const CAMERA = { x: 0, y: 0, zoom: 1.0, baseZoom: 1.0 };
-        const TARGET_VIEWPORT_MIN = 900;
+        const CAMERA = { x: 0, y: 0, zoom: 1.0 };
         const FPS = { buffer:[], lastUpdate: 0, display: "FPS: --" };
         let PHYSICS_MAP = null; 
         let SEED = 1;
-        let SHOPS = [
+        let SHOPS =[
             { id: 'med', type: 'med', x: 1550, y: 1550, w: 60, h: 60, tier: 0, unlocked: false, color: '#444', icon: '+' },
             { id: 'cash', type: 'cash', x: 1650, y: 1550, w: 60, h: 60, tier: 0, unlocked: false, color: '#444', icon: '$' }
         ];
         let shopTimer = 0, enemySpawnTimer = 0, saveTimer = 0;
-        
         let PLAYER = { 
-            x: 1600, y: 1600, radius: 20, cooldown: 0, bodyAngle: 0, turretAngle: 0, 
-            hp: 5, passiveIncome: 0, respawnX: 1600, respawnY: 1600,
-            hasSeenBaseCraft: false,
-            stats: { baseSpeed: 250, baseFireRate: 1.0, maxHp: 5, damage: 1 },
-            equipment: { weapon: 'standard', skin: 'default' },
-            modifiers: [],
-            inventory: { 
-                resources: { cash: 0, parts: 0 }, 
-                items: [] 
-            }
+            x: 1600, y: 1600, radius: 20, cooldown: 0, bodyAngle: 0, turretAngle: 0, hp: 5, maxHp: 5, cash: 0, passiveIncome: 0,
+            inventory: { parts: 0, hasNewItem: false }, respawnX: 1600, respawnY: 1600
         };
-
-        function getPlayerStat(statName) {
-            let val = PLAYER.stats[statName] || 0;
-            // Future AI: Apply modifier logic here
-            return val;
-        }
-
-        let BULLETS = [], PARTICLES = [], ENEMIES = [], LOOT = [], FLOOR_LOOT = [], STRUCTURES = [];
+        let BULLETS =[], PARTICLES =[], ENEMIES = [], LOOT =[], FLOOR_LOOT = [], BASES = [];
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d', { alpha: false });
         let worldCanvas = null;
@@ -524,28 +401,21 @@
             lastAimTime: 0
         };
 
+        function log(msg) { console.log(msg); }
         function resize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            
-            // Dynamic Zoom Logic
-            CAMERA.baseZoom = Math.min(window.innerWidth, window.innerHeight) / TARGET_VIEWPORT_MIN;
-            CAMERA.baseZoom = Math.min(CAMERA.baseZoom, 1.5); // Cap zoom
-            if (CAMERA.zoom !== CAMERA.baseZoom * 0.5) CAMERA.zoom = CAMERA.baseZoom;
-
             if (!STATE.gameStarted) { 
                 CAMERA.x = PLAYER.x - (canvas.width/2)/CAMERA.zoom; 
                 CAMERA.y = PLAYER.y - (canvas.height/2)/CAMERA.zoom; 
             }
         }
-
         function resetInputs() {
             INPUT.keys = {}; INPUT.mouse.down = false; 
             INPUT.touches.leftId = null; INPUT.touches.rightId = null; 
             INPUT.moveVector = {x:0,y:0}; INPUT.isFiring = false; 
             STATE.manualFirePressed = false;
         }
-
         function mulberry32(a) {
             return function() {
               var t = a += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61);
@@ -553,7 +423,6 @@
             }
         }
         let rng = mulberry32(1);
-
         function formatMoney(amount) {
             if (amount < 1000) return "$" + amount.toFixed(2);
             if (amount < 1000000) return "$" + (amount/1000).toFixed(2) + "k";
@@ -619,46 +488,22 @@
                     if (s.staticJoysticks !== undefined) STATE.staticJoysticks = s.staticJoysticks;
                     if (s.tapToFire !== undefined) STATE.tapToFire = s.tapToFire;
                 }
-                const worldConf = localStorage.getItem(WORLD_CONFIG_KEY);
-                if (worldConf) {
-                    WORLD_CONFIG = { ...WORLD_CONFIG, ...JSON.parse(worldConf) };
-                    updateWorldSliders();
-                }
             } catch (e) { console.error(e); }
         }
-
         function loadGame() {
             try {
-                loadSettings();
                 const save = localStorage.getItem(SAVE_KEY);
                 if (save) {
                     const d = JSON.parse(save);
                     SEED = d.seed; 
-                    
-                    // Deep merge to handle migrations
                     PLAYER = { ...PLAYER, ...d.player };
-                    if (!PLAYER.inventory || PLAYER.inventory.parts !== undefined) {
-                        // Migration from old flat inventory structure
-                        const oldParts = PLAYER.inventory ? PLAYER.inventory.parts : 0;
-                        const oldCash = PLAYER.cash || 0;
-                        PLAYER.inventory = { resources: { parts: oldParts, cash: oldCash }, items: [] };
-                    }
-                    if (!PLAYER.stats) PLAYER.stats = { baseSpeed: 250, baseFireRate: 1.0, maxHp: 5, damage: 1 };
-                    if (!PLAYER.equipment) PLAYER.equipment = { weapon: 'standard', skin: 'default' };
-
+                    if (!PLAYER.inventory) PLAYER.inventory = { parts: 0, hasNewItem: false };
                     if (PLAYER.respawnX === undefined) { PLAYER.respawnX = 1600; PLAYER.respawnY = 1600; }
                     ENEMIES = d.enemies || []; 
                     LOOT = d.loot || []; 
                     SHOPS = d.shops || SHOPS;
                     FLOOR_LOOT = d.floorLoot || [];
-                    
-                    // Migrate old BASES to STRUCTURES
-                    if (d.bases && d.bases.length > 0 && (!d.structures || d.structures.length === 0)) {
-                        STRUCTURES = d.bases.map(b => ({ id: 'base_'+Math.random(), type: 'base', x: b.x, y: b.y }));
-                    } else {
-                        STRUCTURES = d.structures || [];
-                    }
-
+                    BASES = d.bases || [];
                     STATE.hasSavedData = true;
                     console.log("Game Loaded. Seed: " + SEED);
                 } else {
@@ -668,61 +513,24 @@
                 rng = mulberry32(SEED);
             } catch (e) { console.error(e); SEED = Math.floor(Math.random() * 1000000); rng = mulberry32(SEED); }
         }
-
         function saveGame() {
-            const data = { seed: SEED, player: PLAYER, enemies: ENEMIES, loot: LOOT, shops: SHOPS, floorLoot: FLOOR_LOOT, structures: STRUCTURES };
+            const data = { seed: SEED, player: PLAYER, enemies: ENEMIES, loot: LOOT, shops: SHOPS, floorLoot: FLOOR_LOOT, bases: BASES };
             localStorage.setItem(SAVE_KEY, JSON.stringify(data));
             const settings = { showFPS: STATE.showFPS, autoFireMode: STATE.autoFireMode, staticJoysticks: STATE.staticJoysticks, tapToFire: STATE.tapToFire };
             localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-            localStorage.setItem(WORLD_CONFIG_KEY, JSON.stringify(WORLD_CONFIG));
+            console.log("Game Saved");
         }
-
         function startOver() {
             if (confirm("Are you sure? This will delete your world and progress.")) { localStorage.removeItem(SAVE_KEY); location.reload(); }
         }
         function clearSettings() {
-            if (confirm("Reset settings to default? World data will be kept.")) { localStorage.removeItem(SETTINGS_KEY); localStorage.removeItem(WORLD_CONFIG_KEY); location.reload(); }
+            if (confirm("Reset settings to default? World data will be kept.")) { localStorage.removeItem(SETTINGS_KEY); location.reload(); }
         }
 
-        // --- 7. UI LOGIC (TABBED PAUSE & SLIDERS) ---
-        function switchTab(tabId) {
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
-            event.target.classList.add('active');
-        }
-
-        function updateWorldSliders() {
-            document.getElementById('slider-water').value = WORLD_CONFIG.waterThreshold;
-            document.getElementById('val-water').innerText = WORLD_CONFIG.waterThreshold;
-            
-            document.getElementById('slider-sand').value = WORLD_CONFIG.sandThreshold;
-            document.getElementById('val-sand').innerText = WORLD_CONFIG.sandThreshold;
-            
-            document.getElementById('slider-noise').value = WORLD_CONFIG.noiseScale;
-            document.getElementById('val-noise').innerText = WORLD_CONFIG.noiseScale;
-            
-            document.getElementById('slider-loot').value = WORLD_CONFIG.lootDensity;
-            document.getElementById('val-loot').innerText = WORLD_CONFIG.lootDensity;
-            
-            document.getElementById('slider-enemies').value = WORLD_CONFIG.maxEnemies;
-            document.getElementById('val-enemies').innerText = WORLD_CONFIG.maxEnemies;
-        }
-
-        function bindSliders() {
-            const bind = (id, key) => {
-                const el = document.getElementById(`slider-${id}`);
-                const val = document.getElementById(`val-${id}`);
-                el.addEventListener('input', (e) => {
-                    val.innerText = e.target.value;
-                    WORLD_CONFIG[key] = parseFloat(e.target.value);
-                });
-            };
-            bind('water', 'waterThreshold');
-            bind('sand', 'sandThreshold');
-            bind('noise', 'noiseScale');
-            bind('loot', 'lootDensity');
-            bind('enemies', 'maxEnemies');
+        // --- 7. INPUT HELPERS ---
+        function updateManualFireButton() {
+            const btn = document.getElementById('btn-manual-fire');
+            if(btn) btn.style.display = (STATE.isMobile && STATE.autoFireMode === 2 && !STATE.tapToFire) ? 'block' : 'none';
         }
 
         // --- 8. ENTITY HELPERS ---
@@ -738,88 +546,87 @@
             }
             if (safe) ENEMIES.push({ x: ex, y: ey, angle: 0, cooldown: rng()*2, hp: 3, maxHp: 3, radius: 20 });
         }
-        
+        function spawnEnemies() {
+            if (!PHYSICS_MAP) return;
+            ENEMIES =[];
+            for(let i=0; i<5; i++) spawnEnemy();
+        }
         function fireWeapon(source, type) {
             if (type === 'player') playSound('shoot'); else playSound('enemy_shoot');
             const angle = (type === 'player') ? source.turretAngle : source.angle;
             BULLETS.push({ x: source.x + Math.cos(angle)*35, y: source.y + Math.sin(angle)*35, vx: Math.cos(angle)*CONFIG.bulletSpeed, vy: Math.sin(angle)*CONFIG.bulletSpeed, life: CONFIG.bulletLife, owner: type });
         }
-        
         function dropLoot(x, y) {
             const rand = Math.random();
-            const maxHp = getPlayerStat('maxHp');
-            let type = (PLAYER.hp === maxHp) ? (rand < 0.49 ? 2 : 1) : (rand < 0.33 ? 0 : rand < 0.66 ? 2 : 1);
+            let type = (PLAYER.hp === PLAYER.maxHp) ? (rand < 0.49 ? 2 : 1) : (rand < 0.33 ? 0 : rand < 0.66 ? 2 : 1);
             LOOT.push({ x, y, type });
         }
-        
         function updateHUD() {
-            const maxHp = getPlayerStat('maxHp');
-            const pct = (PLAYER.hp / maxHp) * 100;
+            const pct = (PLAYER.hp / PLAYER.maxHp) * 100;
             document.getElementById('hud-hp-fill').style.width = `${pct}%`;
-            document.getElementById('hud-hp-text').innerText = `${PLAYER.hp.toFixed(1)}/${maxHp}`;
-            document.getElementById('inv-cash').innerText = formatMoney(PLAYER.inventory.resources.cash);
-            document.getElementById('inv-parts').innerText = `${PLAYER.inventory.resources.parts} 🔩`;
-            
-            // Notification Logic Fix
-            if (PLAYER.inventory.resources.parts >= 10 && !PLAYER.hasSeenBaseCraft) {
-                document.getElementById('inv-badge').style.display = 'block';
-            } else {
-                document.getElementById('inv-badge').style.display = 'none';
-            }
+            document.getElementById('hud-hp-text').innerText = `${PLAYER.hp.toFixed(1)}/${PLAYER.maxHp}`;
+            document.getElementById('inv-cash').innerText = formatMoney(PLAYER.cash);
+            document.getElementById('inv-parts').innerText = `${PLAYER.inventory.parts} 🔩`;
+            document.getElementById('inv-badge').style.display = PLAYER.inventory.hasNewItem ? 'block' : 'none';
         }
-        
         function showZoneMsg(msg) {
             const el = document.getElementById('hud-zone-msg'); el.innerText = msg; el.style.opacity = 1;
             setTimeout(() => { if(el.innerText === msg) el.style.opacity = 0; }, 2000);
         }
-        
         function doGameOver() {
             STATE.gameOver = true;
-            if (PLAYER.inventory.resources.cash > 0) { 
-                LOOT.push({ x: PLAYER.x, y: PLAYER.y, type: 3, value: PLAYER.inventory.resources.cash });
+            if (PLAYER.cash > 0) { 
+                LOOT.push({ x: PLAYER.x, y: PLAYER.y, type: 3, value: PLAYER.cash });
                 const bags = LOOT.filter(l => l.type === 3);
                 if (bags.length > 10) { const oldest = bags[0]; const idx = LOOT.indexOf(oldest); if (idx > -1) LOOT.splice(idx, 1); }
-                PLAYER.inventory.resources.cash = 0; updateHUD(); 
+                PLAYER.cash = 0; updateHUD(); 
             }
             saveGame();
             document.getElementById('game-over-screen').style.display = 'flex';
         }
-        
         function respawn() {
-            PLAYER.hp = getPlayerStat('maxHp'); PLAYER.x = PLAYER.respawnX; PLAYER.y = PLAYER.respawnY; STATE.gameOver = false; BULLETS =[]; updateHUD();
+            PLAYER.hp = PLAYER.maxHp; PLAYER.x = PLAYER.respawnX; PLAYER.y = PLAYER.respawnY; STATE.gameOver = false; BULLETS =[]; updateHUD();
             document.getElementById('game-over-screen').style.display = 'none';
             resetInputs(); CAMERA.x = PLAYER.x - (canvas.width/2)/CAMERA.zoom; CAMERA.y = PLAYER.y - (canvas.height/2)/CAMERA.zoom;
             saveGame();
         }
 
+        function checkShops() {
+            for (let s of SHOPS) {
+                const cx = s.x + s.w/2;
+                const cy = s.y + s.h/2;
+                if (Math.hypot(PLAYER.x - cx, PLAYER.y - cy) < s.w) {
+                    const tierList = TIERS[s.type];
+                    if (s.tier < tierList.length) {
+                        const cost = tierList[s.tier].price;
+                        if (PLAYER.cash >= cost) {
+                            PLAYER.cash -= cost;
+                            s.tier++;
+                            s.unlocked = true;
+                            if (s.type === 'med') {
+                                PLAYER.maxHp += tierList[s.tier-1].rate;
+                                PLAYER.hp = PLAYER.maxHp;
+                            } else if (s.type === 'cash') {
+                                PLAYER.passiveIncome = tierList[s.tier-1].rate;
+                            }
+                            playSound('pickup');
+                            showZoneMsg(`${s.type.toUpperCase()} UPGRADED!`);
+                            saveGame();
+                        } else if (!s.unlocked) {
+                            showZoneMsg(`Need $${cost}`);
+                        }
+                    } else {
+                        showZoneMsg(`MAX TIER`);
+                    }
+                }
+            }
+        }
+
         // --- 9. PHYSICS & INPUT HANDLERS ---
         window.setupInputs = function() {
-            window.addEventListener('keydown', e => {
-                INPUT.keys[e.key.toLowerCase()] = true;
-                
-                // PC Hotkeys
-                if (e.code === 'Space') { e.preventDefault(); INPUT.isFiring = true; }
-                if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
-                
-                if (e.code === 'Escape' && STATE.gameStarted) {
-                    togglePause();
-                }
-                if (e.code === 'KeyI' && STATE.gameStarted && !STATE.isPaused) {
-                    document.getElementById('hud-inventory').click();
-                }
-                if (e.code === 'KeyZ' && STATE.gameStarted && !STATE.isPaused) {
-                    document.getElementById('btn-zoom').click();
-                }
-            });
-            window.addEventListener('keyup', e => {
-                INPUT.keys[e.key.toLowerCase()] = false;
-                if (e.code === 'Space') INPUT.isFiring = false;
-            });
+            window.addEventListener('keydown', e => INPUT.keys[e.key.toLowerCase()] = true);
+            window.addEventListener('keyup', e => INPUT.keys[e.key.toLowerCase()] = false);
             
-            // PC Sticky Key Fixes
-            window.addEventListener('contextmenu', (e) => { resetInputs(); });
-            window.addEventListener('blur', (e) => { resetInputs(); if(STATE.gameStarted && !STATE.gameOver) togglePause(true); });
-
             canvas.addEventListener('mousemove', e => {
                 INPUT.mouse.x = e.clientX;
                 INPUT.mouse.y = e.clientY;
@@ -836,7 +643,6 @@
                 if (!STATE.isMobile) {
                     STATE.isMobile = true;
                     updateManualFireButton();
-                    document.getElementById('hint-zoom').style.display = 'none'; // Hide PC hints on mobile
                 }
                 
                 const currentTouches = Array.from(e.touches);
@@ -914,14 +720,14 @@
                     INPUT.moveVector.x /= len; INPUT.moveVector.y /= len;
                 }
                 INPUT.aimAngle = Math.atan2((INPUT.mouse.y / CAMERA.zoom + CAMERA.y) - PLAYER.y, (INPUT.mouse.x / CAMERA.zoom + CAMERA.x) - PLAYER.x);
-                if(!STATE.isMobile && INPUT.mouse.down && !STATE.placementMode) INPUT.isFiring = true;
+                INPUT.isFiring = !STATE.placementMode && INPUT.mouse.down;
             }
             if (INPUT.moveVector.x !== 0 || INPUT.moveVector.y !== 0) PLAYER.bodyAngle = Math.atan2(INPUT.moveVector.y, INPUT.moveVector.x);
             PLAYER.turretAngle = INPUT.aimAngle;
         }
 
         function handlePhysics(dt) {
-            let speed = getPlayerStat('baseSpeed');
+            let speed = CONFIG.playerSpeed;
             const gx = Math.max(0, Math.min(Math.floor(PLAYER.x), CONFIG.worldSize-1));
             const gy = Math.max(0, Math.min(Math.floor(PLAYER.y), CONFIG.worldSize-1));
             const biome = PHYSICS_MAP[gy * CONFIG.worldSize + gx];
@@ -954,25 +760,21 @@
             if (PLAYER.cooldown > 0) PLAYER.cooldown -= dt;
             if (INPUT.isFiring && PLAYER.cooldown <= 0) {
                 fireWeapon(PLAYER, 'player');
-                PLAYER.cooldown = getPlayerStat('baseFireRate');
+                PLAYER.cooldown = CONFIG.fireRate;
             }
         }
 
         // --- 10. RENDER HELPERS ---
-        function drawTank(x, y, angle, bodyColor, turretColor, isPlayer, turretAngle, skin = 'default') {
+        function drawTank(x, y, angle, bodyColor, turretColor, isPlayer, turretAngle) {
             ctx.save(); ctx.translate(x, y);
             ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.ellipse(5, 5, 20, 20, 0, 0, Math.PI*2); ctx.fill();
             ctx.rotate(angle);
-            
-            // Future AI: Use skin parameter here for different shapes/colors
-            
             ctx.fillStyle = '#111'; ctx.fillRect(-22, -22, 44, 6); ctx.fillRect(-22, 16, 44, 6);
             const bodyGrad = ctx.createLinearGradient(0, -18, 0, 18);
             bodyGrad.addColorStop(0, bodyColor); bodyGrad.addColorStop(0.5, lighten(bodyColor, 20)); bodyGrad.addColorStop(1, bodyColor);
             ctx.fillStyle = bodyGrad; ctx.fillRect(-20, -18, 40, 36);
             ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(-15, -10, 5, 20); ctx.fillRect(10, -10, 5, 20);
             ctx.restore();
-            
             ctx.save(); ctx.translate(x, y); ctx.rotate(isPlayer ? turretAngle : angle);
             ctx.fillStyle = '#263238'; ctx.fillRect(0, -5, 38, 10);
             const turretGrad = ctx.createRadialGradient(-5, -5, 2, 0, 0, 15);
@@ -981,27 +783,14 @@
             ctx.strokeStyle = '#263238'; ctx.lineWidth = 1; ctx.stroke();
             ctx.restore();
         }
-
         function drawJoystick(start, curr) {
             ctx.beginPath(); ctx.arc(start.x, start.y, 50, 0, Math.PI*2); ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth=2; ctx.stroke();
             ctx.beginPath(); ctx.arc(curr.x, curr.y, 25, 0, Math.PI*2); ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fill();
         }
 
         // --- 11. CORE LOOP ---
-        function updateStructures(dt) {
-            // Future AI: Add active structure logic here (healing ticks, turrets)
-            for (let s of STRUCTURES) {
-                switch(s.type) {
-                    case 'base':
-                        // Static base hub, no active tick needed currently
-                        break;
-                }
-            }
-        }
-
         function updateEntities(dt) {
             // Bullets
-            const playerDmg = getPlayerStat('damage');
             for (let i = BULLETS.length - 1; i >= 0; i--) {
                 let b = BULLETS[i];
                 b.x += b.vx * dt;
@@ -1009,17 +798,18 @@
                 b.life -= dt;
                 if (b.life <= 0) { BULLETS.splice(i, 1); continue; }
 
+                // Bullet vs Enemy
                 if (b.owner === 'player') {
                     for (let j = ENEMIES.length - 1; j >= 0; j--) {
                         let e = ENEMIES[j];
                         if (Math.hypot(b.x - e.x, b.y - e.y) < e.radius) {
-                            e.hp -= playerDmg;
+                            e.hp -= 1;
                             PARTICLES.push({x: b.x, y: b.y, size: 5, life: 0.2, color: '#FFEB3B'});
                             BULLETS.splice(i, 1);
                             if (e.hp <= 0) {
                                 dropLoot(e.x, e.y);
                                 ENEMIES.splice(j, 1);
-                                PLAYER.inventory.resources.cash += 1;
+                                PLAYER.cash += 1;
                                 updateHUD();
                             }
                             break;
@@ -1055,37 +845,37 @@
                 }
             }
 
-            // Loot
-            const maxHp = getPlayerStat('maxHp');
+            // Cash Loot
             for (let i = LOOT.length - 1; i >= 0; i--) {
                 let l = LOOT[i];
                 if (Math.hypot(PLAYER.x - l.x, PLAYER.y - l.y) < PLAYER.radius + 20) {
                     playSound('pickup');
-                    if (l.type === 0) PLAYER.hp = Math.min(maxHp, PLAYER.hp + 1);
-                    else if (l.type === 1) PLAYER.inventory.resources.cash += 1;
-                    else if (l.type === 2) PLAYER.inventory.resources.cash += 5;
-                    else if (l.type === 3) PLAYER.inventory.resources.cash += l.value;
+                    if (l.type === 0) PLAYER.hp = Math.min(PLAYER.maxHp, PLAYER.hp + 1);
+                    else if (l.type === 1) PLAYER.cash += 1;
+                    else if (l.type === 2) PLAYER.cash += 5;
+                    else if (l.type === 3) PLAYER.cash += l.value;
                     LOOT.splice(i, 1);
                     updateHUD();
                 }
             }
 
+            // Floor Loot (Parts)
             for (let i = FLOOR_LOOT.length - 1; i >= 0; i--) {
                 let l = FLOOR_LOOT[i];
                 if (Math.hypot(PLAYER.x - l.x, PLAYER.y - l.y) < PLAYER.radius + 15) {
                     playSound('pickup');
-                    PLAYER.inventory.resources.parts += l.qty;
+                    PLAYER.inventory.parts += l.qty;
+                    if (!PLAYER.inventory.hasNewItem) PLAYER.inventory.hasNewItem = true;
                     FLOOR_LOOT.splice(i, 1);
                     updateHUD();
                 }
             }
 
+            // Particles
             for (let i = PARTICLES.length - 1; i >= 0; i--) {
                 PARTICLES[i].life -= dt;
                 if (PARTICLES[i].life <= 0) PARTICLES.splice(i, 1);
             }
-            
-            updateStructures(dt);
         }
 
         function update(dt) {
@@ -1097,28 +887,14 @@
             handlePhysics(dt);
             
             shopTimer += dt;
-            if (PLAYER.passiveIncome > 0) PLAYER.inventory.resources.cash += PLAYER.passiveIncome * dt;
+            if (PLAYER.passiveIncome > 0) PLAYER.cash += PLAYER.passiveIncome * dt;
             if (shopTimer >= 0.2) { shopTimer = 0; updateHUD(); /* checkShops(); */ }
-            
             enemySpawnTimer += dt;
-            if (enemySpawnTimer > 5) { 
-                enemySpawnTimer = 0; 
-                if (ENEMIES.length < WORLD_CONFIG.maxEnemies) spawnEnemy(); 
-            }
-            
+            // if (enemySpawnTimer > 5) { enemySpawnTimer = 0; if (ENEMIES.length < 5) spawnEnemy(); }
             saveTimer += dt;
             if (saveTimer > 10) { saveTimer = 0; saveGame(); }
 
             updateEntities(dt);
-        }
-
-        function drawStructure(struct, ctx) {
-            switch(struct.type) {
-                case 'base':
-                    // In Delivery 1, base drawing is handled by stamping on world canvas directly to preserve performance.
-                    // Future AI: Active dynamic rendering goes here.
-                    break;
-            }
         }
 
         function draw() {
@@ -1131,7 +907,7 @@
             
             ctx.drawImage(worldCanvas, 0, 0);
 
-            /* SHOP RENDER LOGIC PRESERVED FOR FUTURE USE
+            /*
             for (let s of SHOPS) {
                 if (s.unlocked) { ctx.shadowBlur = 15; ctx.shadowColor = s.id === 'med' ? '#f00' : '#0f0'; }
                 ctx.fillStyle = s.color; ctx.fillRect(s.x, s.y, s.w, s.h);
@@ -1159,7 +935,7 @@
             for (let p of PARTICLES) { ctx.fillStyle = p.color; ctx.globalAlpha = p.life * 2; ctx.fillRect(p.x, p.y, p.size, p.size); ctx.globalAlpha = 1.0; }
 
             for (let e of ENEMIES) {
-                drawTank(e.x, e.y, e.angle, CONFIG.colors.enemyBody, '#5D4037', false, 0, 'enemy');
+                drawTank(e.x, e.y, e.angle, CONFIG.colors.enemyBody, '#5D4037', false);
                 ctx.fillStyle = '#000'; ctx.fillRect(e.x-15, e.y-40, 30, 4);
                 ctx.fillStyle = '#f00'; ctx.fillRect(e.x-15, e.y-40, 30 * (e.hp/e.maxHp), 4);
             }
@@ -1172,11 +948,7 @@
             }
             ctx.shadowBlur = 0;
 
-            for (let s of STRUCTURES) {
-                drawStructure(s, ctx);
-            }
-
-            drawTank(PLAYER.x, PLAYER.y, PLAYER.bodyAngle, CONFIG.colors.tankBody, CONFIG.colors.tankTurret, true, PLAYER.turretAngle, PLAYER.equipment.skin);
+            drawTank(PLAYER.x, PLAYER.y, PLAYER.bodyAngle, CONFIG.colors.tankBody, CONFIG.colors.tankTurret, true, PLAYER.turretAngle);
             
             const timeSinceAim = Date.now() - INPUT.lastAimTime;
             if (timeSinceAim < 3000 && !STATE.placementMode) {
@@ -1197,6 +969,7 @@
 
             ctx.restore();
 
+            // Screen space UI
             if (STATE.gameStarted && !STATE.isPaused && !STATE.gameOver && STATE.isMobile) {
                 if (STATE.staticJoysticks) {
                     drawJoystick({x: canvas.width*0.15, y: canvas.height*0.85}, INPUT.touches.leftId ? INPUT.touches.leftCurr : {x: canvas.width*0.15, y: canvas.height*0.85});
@@ -1234,11 +1007,6 @@
         }
 
         // --- 12. UI LOGIC ---
-        function updateManualFireButton() {
-            const btn = document.getElementById('btn-manual-fire');
-            if(btn) btn.style.display = (STATE.isMobile && STATE.autoFireMode === 2 && !STATE.tapToFire) ? 'block' : 'none';
-        }
-
         function updateUIState() {
             const mapAF = ["ANY", "AIMING", "OFF", "NOT AIMING"];
             const descAF =["Fires on touch.", "Fires when aiming.", "Use fire button.", "Fires when stick touched inside deadzone."];
@@ -1251,12 +1019,7 @@
             updateToggle('btn-static-joy', STATE.staticJoysticks, "Static Joysticks");
             updateToggle('btn-tap-fire', STATE.tapToFire, "Tap to Fire");
             updateManualFireButton();
-
-            if (!STATE.isMobile) {
-                document.getElementById('hint-zoom').style.display = 'block';
-            }
         }
-
         function updateToggle(id, val, text) {
             const el = document.getElementById(id);
             el.innerText = `${text}: ${val ? 'ON' : 'OFF'}`;
@@ -1290,7 +1053,7 @@
             };
 
             bindBtn('btn-respawn', respawn);
-            bindBtn('btn-zoom', () => { CAMERA.zoom = CAMERA.zoom === CAMERA.baseZoom ? CAMERA.baseZoom * 0.5 : CAMERA.baseZoom; });
+            bindBtn('btn-zoom', () => { CAMERA.zoom = CAMERA.zoom === 1.0 ? 0.5 : 1.0; });
             
             bindBtn('pause-btn', () => togglePause(true));
             bindBtn('btn-close-pause', () => togglePause(false));
@@ -1300,20 +1063,15 @@
 
             bindBtn('hud-inventory', () => {
                 if(!STATE.gameStarted) return;
-                
-                // Fix Notification Logic
-                PLAYER.hasSeenBaseCraft = true; 
-                updateHUD();
-                
-                document.getElementById('craft-parts-display').innerText = `Parts: ${PLAYER.inventory.resources.parts} 🔩`;
+                PLAYER.inventory.hasNewItem = false; updateHUD();
+                document.getElementById('craft-parts-display').innerText = `Parts: ${PLAYER.inventory.parts} 🔩`;
                 const cBtn = document.getElementById('btn-craft-base');
-                cBtn.disabled = PLAYER.inventory.resources.parts < 10;
+                cBtn.disabled = PLAYER.inventory.parts < 10;
                 document.getElementById('crafting-modal').style.display = 'flex';
             });
             bindBtn('btn-close-crafting', () => document.getElementById('crafting-modal').style.display = 'none');
-            
             bindBtn('btn-craft-base', () => {
-                if(PLAYER.inventory.resources.parts >= 10) {
+                if(PLAYER.inventory.parts >= 10) {
                     document.getElementById('crafting-modal').style.display = 'none';
                     STATE.placementMode = true;
                     document.getElementById('placement-ui').style.display = 'flex';
@@ -1322,12 +1080,9 @@
 
             bindBtn('btn-cancel-place', () => { STATE.placementMode = false; document.getElementById('placement-ui').style.display = 'none'; });
             bindBtn('btn-deploy-place', () => {
-                if(PLAYER.inventory.resources.parts >= 10) {
-                    PLAYER.inventory.resources.parts -= 10;
-                    
-                    // Future Proofing: Use STRUCTURES instead of BASES
-                    STRUCTURES.push({ id: 'base_'+Date.now(), type: 'base', x: PLAYER.x, y: PLAYER.y, hp: 100, maxHp: 100, data: {} });
-                    
+                if(PLAYER.inventory.parts >= 10) {
+                    PLAYER.inventory.parts -= 10;
+                    BASES.push({x: PLAYER.x, y: PLAYER.y});
                     PLAYER.respawnX = PLAYER.x; PLAYER.respawnY = PLAYER.y;
                     stampBase(PLAYER.x, PLAYER.y, worldCanvas.getContext('2d', { willReadFrequently: true }));
                     STATE.placementMode = false;
@@ -1349,28 +1104,7 @@
             bindBtn('btn-copy-log', () => { const text = DEBUG_LOG.join('\n'); if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => alert("Copied")).catch(e => fallbackCopy(text)); else fallbackCopy(text); });
             bindBtn('btn-start-over', startOver);
             bindBtn('btn-clear-settings', clearSettings);
-            
-            // Apply World Config Regen
-            bindBtn('btn-regen-world', () => {
-                if (confirm("Regenerating world will wipe all structures and floor loot. Continue?")) {
-                    saveGame();
-                    STRUCTURES = [];
-                    FLOOR_LOOT = [];
-                    ENEMIES = [];
-                    STATE.gameStarted = false;
-                    document.getElementById('pause-modal').style.display = 'none';
-                    document.getElementById('pause-overlay').style.display = 'none';
-                    document.getElementById('ui-layer').style.display = 'none';
-                    document.getElementById('loading-bar-container').style.display = 'block';
-                    document.getElementById('loading-text').style.visibility = 'visible';
-                    document.getElementById('start-screen').style.display = 'flex';
-                    startGeneration();
-                }
-            });
-
             bindPress('btn-manual-fire', () => STATE.manualFirePressed = true, () => STATE.manualFirePressed = false);
-            
-            bindSliders();
         }
 
         function fallbackCopy(text) {
@@ -1407,7 +1141,7 @@
             const wCtx = worldCanvas.getContext('2d', { willReadFrequently: true });
 
             wCtx.fillStyle = CONFIG.colors.land; wCtx.fillRect(0, 0, size, size);
-            const noiseScale = WORLD_CONFIG.noiseScale;
+            const noiseScale = 0.003;
             
             function processNoise(y) {
                 try {
@@ -1419,9 +1153,8 @@
                             const pIdx = cy * size + cx;
                             let n = Noise.perlin2(cx * noiseScale, cy * noiseScale);
                             n += 0.5 * Noise.perlin2(cx * noiseScale * 3, cy * noiseScale * 3);
-                            
-                            if (n < WORLD_CONFIG.waterThreshold) TEMP_MAP[pIdx] = 1;
-                            else if (n < WORLD_CONFIG.sandThreshold) TEMP_MAP[pIdx] = 3;
+                            if (n < -0.25) TEMP_MAP[pIdx] = 1;
+                            else if (n < -0.15) TEMP_MAP[pIdx] = 3;
                             else TEMP_MAP[pIdx] = 0;
                         }
                     }
@@ -1485,10 +1218,10 @@
         }
 
         function finishGeneration(wCtx) {
-            // Seed Floor Loot if new game or after wiping
-            if (FLOOR_LOOT.length === 0) {
+            // Seed Floor Loot if new game
+            if (!STATE.hasSavedData) {
                 let attempts = 0;
-                while(FLOOR_LOOT.length < WORLD_CONFIG.lootDensity && attempts < 2000) {
+                while(FLOOR_LOOT.length < 150 && attempts < 2000) {
                     attempts++;
                     let lx = rng() * CONFIG.worldSize; let ly = rng() * CONFIG.worldSize;
                     let idx = Math.floor(ly) * CONFIG.worldSize + Math.floor(lx);
@@ -1500,9 +1233,7 @@
             }
 
             // Stamp any saved bases
-            for (let s of STRUCTURES) {
-                if (s.type === 'base') stampBase(s.x, s.y, wCtx);
-            }
+            for (let b of BASES) stampBase(b.x, b.y, wCtx);
 
             console.log("Generation Complete");
             STATE.worldReady = true;
@@ -1547,19 +1278,15 @@
             setupInputs();
             setupUI();
             updateUIState();
-            
-            // Hide boot splash
-            const splash = document.getElementById('boot-splash');
-            if (splash) splash.style.display = 'none';
+
+            window.addEventListener('blur', () => {
+                if (typeof togglePause === 'function' && STATE.gameStarted && !STATE.isPaused && !STATE.gameOver) { togglePause(true); resetInputs(); saveGame(); }
+            });
         };
 
         // --- 15. BOOTSTRAP ---
         window.addEventListener('load', function() {
-            try { 
-                // Defer loading to allow CSS boot splash to render instantly
-                if (window.initGame) setTimeout(() => { window.initGame(); }, 100); 
-                else throw new Error("initGame not found"); 
-            } 
+            try { if (window.initGame) window.initGame(); else throw new Error("initGame not found"); } 
             catch (e) { console.error("BOOTSTRAP ERROR", e); }
         });
 
