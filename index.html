@@ -3,201 +3,143 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TTR v28</title>
+    <title>TTR v29 - Infinite Engine</title>
     <link rel="icon" href="data:,">
     <style>
         /* CORE STYLES */
         body {
-            margin: 0;
-            padding: 0;
-            background-color: #111;
-            overflow: hidden;
-            touch-action: none;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            color: #eee;
-            user-select: none;
-            -webkit-user-select: none;
+            margin: 0; padding: 0; background-color: #111; overflow: hidden; touch-action: none;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #eee;
+            user-select: none; -webkit-user-select: none;
         }
 
-        canvas { display: block; }
+        canvas { display: block; cursor: crosshair; }
+
+        /* BOOT SPLASH */
+        #boot-splash {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; color: #fff; display: flex; justify-content: center; align-items: center;
+            font-size: 20px; letter-spacing: 4px; z-index: 99999; font-weight: bold;
+        }
+        .spinner {
+            width: 30px; height: 30px; border: 4px solid #333; border-top: 4px solid #4CAF50;
+            border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
         /* UI OVERLAY */
-        #ui-layer {
-            display: none;
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none;
-        }
-
-        .hud-text {
-            text-shadow: 1px 1px 2px #000;
-            font-weight: 600;
-            pointer-events: auto;
-            letter-spacing: 1px;
-        }
-
-        #top-left-info {
-            position: absolute; top: 15px; left: 15px;
-            display: flex; gap: 15px; font-size: 12px; color: #aaa;
-            pointer-events: none;
-        }
+        #ui-layer { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .hud-text { text-shadow: 1px 1px 2px #000; font-weight: 600; pointer-events: auto; letter-spacing: 1px; }
+        #top-left-info { position: absolute; top: 15px; left: 15px; display: flex; gap: 15px; font-size: 12px; color: #aaa; pointer-events: none; }
 
         /* HP BAR */
         #hud-hp-container {
-            position: absolute; top: 15px; right: 60px;
-            width: 220px; height: 28px;
-            background: #000; border: 2px solid #444;
-            border-radius: 2px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            position: absolute; top: 15px; right: 60px; width: 220px; height: 28px;
+            background: #000; border: 2px solid #444; border-radius: 2px; box-shadow: 0 2px 5px rgba(0,0,0,0.5);
         }
-        #hud-hp-fill {
-            width: 100%; height: 100%;
-            background: linear-gradient(180deg, #4CAF50, #2E7D32);
-            transition: width 0.2s;
-        }
-        #hud-hp-text {
-            position: absolute; top: 0; left: 0; width: 100%;
-            line-height: 28px; text-align: center; font-size: 14px;
-            color: #fff; text-shadow: 1px 1px 2px #000;
-        }
+        #hud-hp-fill { width: 100%; height: 100%; background: linear-gradient(180deg, #4CAF50, #2E7D32); transition: width 0.2s; }
+        #hud-hp-text { position: absolute; top: 0; left: 0; width: 100%; line-height: 28px; text-align: center; font-size: 14px; color: #fff; text-shadow: 1px 1px 2px #000; }
 
-        /* INVENTORY (Replaces Cash) */
+        /* INVENTORY */
         #hud-inventory {
-            position: absolute; top: 50px; right: 60px;
-            background: rgba(0,0,0,0.7); padding: 8px 12px;
-            border: 1px solid #555; border-radius: 4px;
-            font-family: monospace; font-size: 18px; color: #fff;
-            pointer-events: auto; cursor: pointer;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            position: absolute; top: 50px; right: 60px; background: rgba(0,0,0,0.7); padding: 8px 12px;
+            border: 1px solid #555; border-radius: 4px; font-family: monospace; font-size: 18px; color: #fff;
+            pointer-events: auto; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.5);
         }
         #hud-inventory:active { transform: scale(0.98); }
         #inv-cash { color: #81C784; }
         #inv-parts { color: #ccc; margin-left: 10px; }
         #inv-badge {
             display: none; position: absolute; top: -5px; right: -5px;
-            width: 14px; height: 14px; background: #ff3333;
-            border-radius: 50%; border: 2px solid #111;
+            width: 14px; height: 14px; background: #ff3333; border-radius: 50%; border: 2px solid #111;
         }
 
-        #hud-zone-msg {
-            position: absolute; top: 20%; width: 100%; text-align: center;
-            font-size: 18px; color: #FFD700; text-shadow: 0 2px 4px #000;
-            opacity: 0; transition: opacity 0.3s;
-        }
-
-        #pause-btn {
-            position: absolute; top: 15px; right: 15px;
-            cursor: pointer; font-size: 24px; line-height: 28px;
-            width: 32px; height: 32px; text-align: center;
-            background: rgba(0,0,0,0.5); border: 1px solid #666; border-radius: 4px;
-            pointer-events: auto;
-        }
+        #hud-zone-msg { position: absolute; top: 20%; width: 100%; text-align: center; font-size: 18px; color: #FFD700; text-shadow: 0 2px 4px #000; opacity: 0; transition: opacity 0.3s; }
+        #pause-btn { position: absolute; top: 15px; right: 15px; cursor: pointer; font-size: 24px; line-height: 28px; width: 32px; height: 32px; text-align: center; background: rgba(0,0,0,0.5); border: 1px solid #666; border-radius: 4px; pointer-events: auto; }
 
         /* ZOOM BUTTON */
         #btn-zoom {
-            position: absolute; bottom: 20px; left: 20px;
-            width: 50px; height: 50px; border-radius: 50%;
-            background: rgba(0,0,0,0.6); border: 2px solid #666;
-            display: flex; justify-content: center; align-items: center;
-            font-size: 24px; pointer-events: auto; cursor: pointer;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            position: absolute; bottom: 20px; left: 20px; width: 50px; height: 50px; border-radius: 50%;
+            background: rgba(0,0,0,0.6); border: 2px solid #666; display: flex; flex-direction: column; justify-content: center; align-items: center;
+            font-size: 20px; pointer-events: auto; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
         #btn-zoom:active { transform: scale(0.9); }
+        .btn-hint { font-size: 10px; color: #aaa; margin-top: -2px; display: none; }
 
         /* MANUAL FIRE BUTTON */
         #btn-manual-fire {
-            display: none;
-            position: absolute; bottom: 20%; right: 15%;
-            width: 90px; height: 90px;
+            display: none; position: absolute; bottom: 20%; right: 15%; width: 90px; height: 90px;
             background: radial-gradient(circle, rgba(255, 80, 80, 0.6) 0%, rgba(200, 40, 40, 0.8) 100%);
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            pointer-events: auto; touch-action: manipulation;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+            border: 3px solid rgba(255, 255, 255, 0.3); border-radius: 50%;
+            pointer-events: auto; touch-action: manipulation; box-shadow: 0 4px 10px rgba(0,0,0,0.6);
         }
         #btn-manual-fire:active { transform: scale(0.95); filter: brightness(1.2); }
 
         /* MODALS */
         .fullscreen-modal {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(17,17,17,0.95);
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            z-index: 50; pointer-events: auto;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(17,17,17,0.95);
+            display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 50; pointer-events: auto;
         }
         h1 { margin: 0 0 20px 0; color: #ccc; text-transform: uppercase; letter-spacing: 4px; font-weight: 300; border-bottom: 1px solid #444; padding-bottom: 10px;}
         
         .big-btn {
-            padding: 15px 50px; font-size: 20px;
-            background: linear-gradient(180deg, #333, #222);
-            color: #ddd; border: 1px solid #555; border-radius: 2px;
-            cursor: pointer; font-weight: bold;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-            touch-action: manipulation;
-            text-transform: uppercase; letter-spacing: 1px;
+            padding: 15px 50px; font-size: 20px; background: linear-gradient(180deg, #333, #222); color: #ddd; border: 1px solid #555; border-radius: 2px;
+            cursor: pointer; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.5); touch-action: manipulation; text-transform: uppercase; letter-spacing: 1px;
         }
         .big-btn:active { background: #444; transform: translateY(2px); }
         .big-btn:disabled { opacity: 0.5; pointer-events: none; }
 
-        #loading-bar-container {
-            width: 60%; height: 10px; background: #222; border: 1px solid #444; margin-top: 20px; display: none;
-        }
-        #loading-bar-fill { width: 0%; height: 100%; background: #4CAF50; transition: width 0.1s; }
-        #loading-text { color: #666; font-size: 12px; margin-top: 5px; min-height: 15px; visibility: hidden;}
+        /* INVENTORY GRID (Future Proofing) */
+        #expanded-inventory-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; width: 80%; max-width: 400px; }
+        .inv-slot { width: 100%; aspect-ratio: 1; background: #222; border: 1px solid #444; display: flex; justify-content: center; align-items: center; color: #666; font-size: 12px; }
 
-        /* PLACEMENT UI */
-        #placement-ui {
-            display: none; position: absolute; bottom: 10%; width: 100%;
-            justify-content: center; gap: 20px; z-index: 15; pointer-events: none;
-        }
+        #placement-ui { display: none; position: absolute; bottom: 10%; width: 100%; justify-content: center; gap: 20px; z-index: 15; pointer-events: none; }
         #placement-ui button { pointer-events: auto; font-size: 16px; padding: 15px 30px; }
 
-        /* PAUSE MENU */
+        /* PAUSE MENU & TABS */
         #pause-modal {
-            display: none; position: absolute;
-            top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(30, 30, 30, 0.95); border: 1px solid #555;
-            padding: 20px; text-align: center;
-            min-width: 300px; max-height: 80vh; overflow-y: auto;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-            z-index: 20; pointer-events: auto;
+            display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(30, 30, 30, 0.95); border: 1px solid #555; padding: 0; width: 320px;
+            max-height: 80vh; box-shadow: 0 10px 30px rgba(0,0,0,0.8); z-index: 20; pointer-events: auto; display: flex; flex-direction: column;
         }
-        #pause-overlay {
-            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.7); z-index: 10; pointer-events: auto; 
-        }
-        .modal-btn {
-            display: block; width: 100%; margin: 8px 0; padding: 12px;
-            background: #333; color: #ccc; border: 1px solid #555;
-            cursor: pointer; font-family: inherit; font-size: 14px;
-            touch-action: manipulation;
-        }
+        .tab-header { display: flex; border-bottom: 1px solid #444; background: #222; }
+        .tab-btn { flex: 1; padding: 12px 0; text-align: center; color: #888; cursor: pointer; font-weight: bold; font-size: 12px; letter-spacing: 1px; border-bottom: 2px solid transparent; }
+        .tab-btn.active { color: #fff; border-bottom: 2px solid #4CAF50; background: #2a2a2a; }
+        .tab-content { display: none; padding: 20px; overflow-y: auto; flex: 1; }
+        .tab-content.active { display: block; }
+        
+        #pause-overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 10; pointer-events: auto; }
+        .modal-btn { display: block; width: 100%; margin: 8px 0; padding: 12px; background: #333; color: #ccc; border: 1px solid #555; cursor: pointer; font-family: inherit; font-size: 14px; touch-action: manipulation; }
         .modal-btn.active { background: #2E7D32; color: #fff; border-color: #4CAF50; }
-        .modal-desc { font-size: 11px; color: #888; margin-bottom: 10px; font-style: italic; }
-        #btn-copy-log { display: none; }
+        .modal-desc { font-size: 11px; color: #888; margin-bottom: 10px; font-style: italic; text-align: center; }
+
+        /* SLIDERS */
+        .slider-row { margin-bottom: 15px; text-align: left; }
+        .slider-row label { display: block; font-size: 12px; color: #ccc; margin-bottom: 5px; }
+        .slider-row input[type=range] { width: 100%; cursor: pointer; }
+        .slider-row .val { float: right; color: #4CAF50; font-family: monospace; }
         
         #debug-overlay {
-            display: none; position: absolute; bottom: 0; left: 0; width: 100%; height: 30%;
-            background: rgba(0,0,0,0.8); color: #0f0; font-family: monospace;
-            overflow-y: scroll; font-size: 11px; box-sizing: border-box; padding: 5px;
-            z-index: 100; pointer-events: none; user-select: none; border-top: 1px solid #0f0;
+            display: none; position: absolute; bottom: 0; left: 0; width: 100%; height: 30%; background: rgba(0,0,0,0.8); color: #0f0; font-family: monospace;
+            overflow-y: scroll; font-size: 11px; box-sizing: border-box; padding: 5px; z-index: 100; pointer-events: none; border-top: 1px solid #0f0;
         }
-        #debug-overlay.interactive { pointer-events: auto; user-select: text; -webkit-user-select: text; }
-
-        /* CRASH SCREEN (RSOD) */
+        
+        /* CRASH SCREEN */
         #crash-screen {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #500; z-index: 10000; flex-direction: column; justify-content: center; align-items: center;
-            padding: 20px; box-sizing: border-box;
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #500; z-index: 100000; flex-direction: column; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;
         }
-        #crash-log {
-            width: 90%; height: 50%; background: #200; color: #fff;
-            border: 1px solid #f88; font-family: monospace; padding: 10px;
-            margin-bottom: 20px; font-size: 10px;
-        }
-        #btn-copy-crash { padding: 15px 30px; background: #fff; color: #900; border: none; font-weight: bold; cursor: pointer; }
+        #crash-log { width: 90%; height: 50%; background: #200; color: #fff; border: 1px solid #f88; font-family: monospace; padding: 10px; margin-bottom: 20px; font-size: 10px; }
     </style>
 </head>
 <body>
+
+    <!-- BOOT SPLASH SCREEN -->
+    <div id="boot-splash">
+        <div style="text-align:center;">
+            <div class="spinner" style="margin: 0 auto 20px auto;"></div>
+            INITIALIZING ENGINE...
+        </div>
+    </div>
 
     <canvas id="gameCanvas"></canvas>
 
@@ -205,16 +147,14 @@
     <div id="crash-screen">
         <h1 style="color:white; border:none;">FATAL ERROR</h1>
         <textarea id="crash-log" readonly></textarea>
-        <button id="btn-copy-crash">COPY ERROR LOG</button>
+        <button class="big-btn" id="btn-copy-crash">COPY ERROR LOG</button>
         <p style="color:#faa; font-size:12px; margin-top:10px;">Please send this log to the developer.</p>
     </div>
 
     <!-- START SCREEN -->
-    <div id="start-screen" class="fullscreen-modal">
+    <div id="start-screen" class="fullscreen-modal" style="display:none;">
         <h1>Tank Tycoon</h1>
-        <button id="btn-start" class="big-btn">INITIALIZE</button>
-        <div id="loading-bar-container"><div id="loading-bar-fill"></div></div>
-        <div id="loading-text">Generating World...</div>
+        <button id="btn-start" class="big-btn">DEPLOY</button>
     </div>
 
     <!-- GAME OVER SCREEN -->
@@ -223,34 +163,33 @@
         <button id="btn-respawn" class="big-btn" style="background: #500; border-color: #f00;">REDEPLOY</button>
     </div>
 
-    <!-- CRAFTING MENU -->
+    <!-- CRAFTING / INVENTORY MENU -->
     <div id="crafting-modal" class="fullscreen-modal" style="display:none;">
-        <h1>CRAFTING</h1>
-        <p id="craft-parts-display" style="font-size:24px; color:#fff; font-family:monospace; margin-bottom:40px;">Parts: 0 🔩</p>
+        <h1>INVENTORY</h1>
+        <p id="craft-parts-display" style="font-size:24px; color:#fff; font-family:monospace; margin-bottom:20px;">Parts: 0 🔩</p>
+        
+        <!-- Future Proofing: Expanded Inventory Slots -->
+        <div id="expanded-inventory-grid">
+            <div class="inv-slot">Empty</div><div class="inv-slot">Empty</div>
+            <div class="inv-slot">Empty</div><div class="inv-slot">Empty</div>
+        </div>
+
         <button id="btn-craft-base" class="big-btn" style="border-color:#4CAF50;">CRAFT BASE HUB (10 🔩)</button>
         <button id="btn-close-crafting" class="big-btn" style="margin-top:20px; background:#500; border-color:#f00;">CLOSE</button>
     </div>
 
     <div id="ui-layer">
-        <div id="top-left-info">
-            <span id="version-display">v28</span>
-            <span id="fps-counter">FPS: --</span>
-        </div>
+        <div id="top-left-info"><span id="version-display">v29</span><span id="fps-counter">FPS: --</span></div>
+        <div id="hud-hp-container"><div id="hud-hp-fill"></div><div id="hud-hp-text">5/5</div></div>
         
-        <div id="hud-hp-container">
-            <div id="hud-hp-fill"></div>
-            <div id="hud-hp-text">5/5</div>
-        </div>
-
         <div id="hud-inventory">
-            <span id="inv-cash">$0</span><span id="inv-parts">0 🔩</span>
+            <span id="inv-cash">$0</span><span id="inv-parts">0 🔩</span><span id="inv-hint" class="btn-hint" style="display:none; margin-left:5px;">[I]</span>
             <div id="inv-badge"></div>
         </div>
 
         <div id="hud-zone-msg"></div>
         <div id="pause-btn">&#10074;&#10074;</div>
-        
-        <div id="btn-zoom">🔍</div>
+        <div id="btn-zoom">🔍<div id="zoom-hint" class="btn-hint">[Z]</div></div>
         <div id="btn-manual-fire"></div>
 
         <div id="placement-ui">
@@ -259,1037 +198,574 @@
         </div>
 
         <div id="pause-overlay"></div>
-        <div id="pause-modal">
-            <h3 style="color:#ccc; margin-top:0;">SYSTEM PAUSED</h3>
-            <button id="btn-toggle-fps" class="modal-btn active">Show FPS: ON</button>
-            <button id="btn-auto-fire" class="modal-btn active">Auto-Fire: ANY</button>
-            <div id="autofire-desc" class="modal-desc">Fires when right stick is touched.</div>
-            <button id="btn-static-joy" class="modal-btn">Static Joysticks: OFF</button>
-            <div class="modal-desc">Fixes controls to bottom corners.</div>
-            <button id="btn-tap-fire" class="modal-btn">Tap to Fire: OFF</button>
-            <div class="modal-desc">Tap screen to aim & shoot (Mobile).</div>
-            <button id="btn-toggle-debug" class="modal-btn">Show Live Debug: OFF</button>
-            <button id="btn-copy-log" class="modal-btn">Copy Log</button>
-            <hr style="border-color:#444; margin: 15px 0;">
-            <button id="btn-clear-settings" class="modal-btn" style="border-color:#884444; color:#daa;">Clear Settings</button>
-            <button id="btn-start-over" class="modal-btn" style="border-color:#f00; color:#f88;">Start Over</button>
-            <button id="btn-close-pause" class="modal-btn" style="background: #500; border-color: #800; margin-top: 20px;">RESUME</button>
+        <div id="pause-modal" style="display:none;">
+            <div class="tab-header">
+                <div class="tab-btn active" onclick="switchTab('tab-game')">GAME</div>
+                <div class="tab-btn" onclick="switchTab('tab-world')">WORLD</div>
+                <div class="tab-btn" onclick="switchTab('tab-debug')">DEBUG</div>
+            </div>
+            
+            <div id="tab-game" class="tab-content active">
+                <button id="btn-toggle-fps" class="modal-btn active">Show FPS: ON</button>
+                <button id="btn-auto-fire" class="modal-btn active">Auto-Fire: ANY</button>
+                <div id="autofire-desc" class="modal-desc">Fires when right stick is touched.</div>
+                <button id="btn-static-joy" class="modal-btn">Static Joysticks: OFF</button>
+                <button id="btn-tap-fire" class="modal-btn">Tap to Fire: OFF</button>
+            </div>
+
+            <div id="tab-world" class="tab-content">
+                <div class="slider-row"><label>Water Threshold <span id="val-water" class="val">-0.25</span></label><input type="range" id="cfg-water" min="-0.5" max="0" step="0.05"></div>
+                <div class="slider-row"><label>Sand Threshold <span id="val-sand" class="val">-0.15</span></label><input type="range" id="cfg-sand" min="-0.3" max="0.2" step="0.05"></div>
+                <div class="slider-row"><label>Noise Scale (Patchiness) <span id="val-noise" class="val">0.003</span></label><input type="range" id="cfg-noise" min="0.001" max="0.01" step="0.001"></div>
+                <div class="slider-row"><label>Loot Density <span id="val-loot" class="val">150</span></label><input type="range" id="cfg-loot" min="0" max="500" step="10"></div>
+                <div class="slider-row"><label>Max Enemies <span id="val-enemies" class="val">5</span></label><input type="range" id="cfg-enemies" min="0" max="20" step="1"></div>
+                
+                <button id="btn-regen-world" class="modal-btn" style="background:#4CAF50; color:#fff; border-color:#2E7D32; margin-top:15px;">APPLY & REGENERATE</button>
+                <hr style="border-color:#444; margin: 15px 0;">
+                <button id="btn-clear-settings" class="modal-btn" style="border-color:#884444; color:#daa;">Clear Settings</button>
+                <button id="btn-start-over" class="modal-btn" style="border-color:#f00; color:#f88;">Hard Wipe Save</button>
+            </div>
+
+            <div id="tab-debug" class="tab-content">
+                <button id="btn-toggle-debug" class="modal-btn">Show Live Debug: OFF</button>
+                <button id="btn-copy-log" class="modal-btn" style="display:none;">Copy Log</button>
+            </div>
+
+            <div style="padding: 10px 20px 20px 20px;">
+                <button id="btn-close-pause" class="modal-btn" style="background: #500; border-color: #800;">RESUME</button>
+            </div>
         </div>
         <div id="debug-overlay"></div>
     </div>
 
     <script>
         /** 
-         * TTR ENGINE v28
-         * Fixes: Android generation load times, left joystick infinite movement bug, temporarily disabled enemies and shops.
-         * New: Zoom toggle, seeded Parts (🔩) floor loot, persistent inventory, Base Hub crafting & placement.
+         * TTR ENGINE v29 - INFINITE ENGINE
+         * Architecture: Chunk-based infinite map, Future-proofed Player/Structure/Item systems, Desktop Hotkeys.
          */
 
         // --- 1. CONSOLE BRIDGE & CRASH UI ---
         const DEBUG_LOG =[];
-        const originalLog = console.log;
-        const originalWarn = console.warn;
-        const originalError = console.error;
-
-        function showCrashScreen(msg) {
-            const screen = document.getElementById('crash-screen');
-            const textArea = document.getElementById('crash-log');
-            if (screen && textArea) {
-                screen.style.display = 'flex';
-                DEBUG_LOG.push(msg);
-                textArea.value = DEBUG_LOG.join('\n');
-            }
-        }
-
-        function logToOverlay(msg, type = 'info') {
-            const timestamp = new Date().toLocaleTimeString();
-            const entry = `[${timestamp}] [${type.toUpperCase()}] ${msg}`;
-            DEBUG_LOG.push(entry);
+        const originalLog = console.log; const originalWarn = console.warn; const originalError = console.error;
+        function showCrashScreen(msg) { const sc = document.getElementById('crash-screen'), ta = document.getElementById('crash-log'); if(sc && ta){ sc.style.display='flex'; DEBUG_LOG.push(msg); ta.value=DEBUG_LOG.join('\n'); } }
+        function logToOverlay(msg, type='info') {
+            const t = new Date().toLocaleTimeString(); const e = `[${t}] [${type.toUpperCase()}] ${msg}`; DEBUG_LOG.push(e);
             const overlay = document.getElementById('debug-overlay');
-            if (overlay) {
-                const div = document.createElement('div');
-                div.textContent = entry;
-                if (type === 'error') div.style.color = '#ff5555';
-                if (type === 'warn') div.style.color = '#ffff55';
-                overlay.appendChild(div);
-                if (type === 'error') overlay.style.display = 'block';
-            }
+            if (overlay) { const div = document.createElement('div'); div.textContent = e; div.style.color = type==='error'?'#ff5555':type==='warn'?'#ffff55':'#0f0'; overlay.appendChild(div); if(type==='error') overlay.style.display='block'; }
         }
-
         console.log = function(...args) { originalLog.apply(console, args); logToOverlay(args.join(' '), 'info'); };
         console.warn = function(...args) { originalWarn.apply(console, args); logToOverlay(args.join(' '), 'warn'); };
         console.error = function(...args) { originalError.apply(console, args); logToOverlay(args.join(' '), 'error'); };
-
-        window.onerror = function(msg, url, line) {
-            const err = `FATAL: ${msg} (Line ${line})`;
-            console.error(err);
-            showCrashScreen(err);
-            return false;
-        };
-
-        window.addEventListener('DOMContentLoaded', () => {
-            const btn = document.getElementById('btn-copy-crash');
-            if (btn) {
-                btn.onclick = () => {
-                    const text = document.getElementById('crash-log').value;
-                    if (navigator.clipboard && navigator.clipboard.writeText) {
-                        navigator.clipboard.writeText(text).then(() => alert("Copied to clipboard")).catch(e => fallbackCopy(text));
-                    } else {
-                        fallbackCopy(text);
-                    }
-                };
-            }
-        });
+        window.onerror = function(msg, url, line) { const err = `FATAL: ${msg} (Line ${line})`; console.error(err); showCrashScreen(err); return false; };
 
         // --- 2. CONFIG & STATE ---
-        const VERSION = "v28";
-        const SETTINGS_KEY = "TTR_SETTINGS";
-        const SAVE_KEY = "TTR_SAVE_DATA";
+        const VERSION = "v29"; const SETTINGS_KEY = "TTR_SETTINGS"; const SAVE_KEY = "TTR_SAVE_DATA";
+        
+        let WORLD_CONFIG = { waterThreshold: -0.25, sandThreshold: -0.15, noiseScale: 0.003, lootDensity: 150, maxEnemies: 5, enemySpawnRate: 5.0 };
         const CONFIG = {
-            worldSize: 3200,
-            colors: { land: '#4b5320', landNoise: '#3e4418', waterDeep: '#1a262f', waterShallow: '#2b3e4d', sand: '#d2b48c', sandNoise: '#c2a47c', concrete: '#555555', tankBody: '#37474F', tankTurret: '#546E7A', enemyBody: '#8D6E63' },
-            playerSpeed: 250, waterSpeedMult: 0.3, sandSpeedMult: 0.5, fireRate: 1.0, bulletSpeed: 700, bulletLife: 1.5, joystickDeadzone: 0.2, cameraDamping: 10
+            colors: { land: '#4b5320', waterDeep: '#1a262f', sand: '#d2b48c', concrete: '#555555', tankBody: '#37474F', tankTurret: '#546E7A', enemyBody: '#8D6E63' },
+            waterSpeedMult: 0.3, sandSpeedMult: 0.5, bulletSpeed: 700, bulletLife: 1.5, joystickDeadzone: 0.2, cameraDamping: 10
         };
-        const TIERS = {
-            cash:[{price:10,rate:0.1},{price:50,rate:0.25},{price:500,rate:1.0},{price:2500,rate:5.0},{price:5000,rate:10.0},{price:25000,rate:100.0},{price:100000,rate:500.0},{price:500000,rate:2500.0},{price:5000000,rate:5000.0},{price:25000000,rate:25000.0}],
-            med:[{price:100,rate:1},{price:500,rate:2},{price:1000,rate:3}]
-        };
+        
         const STATE = {
-            worldReady: false, startOnLoad: false, gameStarted: false, gameOver: false, lastTime: 0, 
+            gameStarted: false, gameOver: false, lastTime: 0, isPaused: false, isMobile: false, audioInitialized: false,
             showFPS: true, showDebug: false, autoFireMode: 0, staticJoysticks: false, tapToFire: false,
-            savedAutoFire: 0, savedStatic: false, isMobile: false, isPaused: false, audioInitialized: false,
-            wasInWater: false, manualFirePressed: false, hasSavedData: false, placementMode: false
+            savedAutoFire: 0, savedStatic: false, wasInWater: false, manualFirePressed: false, placementMode: false
         };
 
-        // --- 3. LIBRARIES ---
-        const Noise = (function() {
-            const p = new Uint8Array(512);
-            const permutation =[151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,190,6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,125,136,171,168,68,175,74,165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,102,143,54,65,25,63,161,1,216,80,73,209,76,132,187,208,89,18,169,200,196,135,130,116,188,159,86,164,100,109,198,173,186,3,64,52,217,226,250,124,123,5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,223,183,170,213,119,248,152,2,44,154,163,70,221,153,101,155,167,43,172,9,129,22,39,253,19,98,108,110,79,113,224,232,178,185,112,104,218,246,97,228,251,34,242,193,238,210,144,12,191,179,162,241,81,51,145,235,249,14,239,107,49,192,214,31,181,199,106,157,184,84,204,176,115,121,50,45,127,4,150,254,138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180];
-            for (let i=0; i < 256 ; i++) p[256+i] = p[i] = permutation[i];
-            function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
-            function lerp(t, a, b) { return a + t * (b - a); }
-            function grad(hash, x, y, z) { const h = hash & 15; const u = h<8 ? x : y, v = h<4 ? y : h==12||h==14 ? x : z; return ((h&1) == 0 ? u : -u) + ((h&2) == 0 ? v : -v); }
-            return { perlin2: function(x, y) { const X = Math.floor(x) & 255, Y = Math.floor(y) & 255; x -= Math.floor(x); y -= Math.floor(y); const u = fade(x), v = fade(y); const A = p[X]+Y, AA = p[A], AB = p[A+1], B = p[X+1]+Y, BA = p[B], BB = p[B+1]; return lerp(v, lerp(u, grad(p[AA], x, y, 0), grad(p[BA], x-1, y, 0)), lerp(u, grad(p[AB], x, y-1, 0), grad(p[BB], x-1, y-1, 0))); } };
-        })();
-
-        // --- 4. UTILS & GLOBALS ---
-        const CAMERA = { x: 0, y: 0, zoom: 1.0 };
-        const FPS = { buffer:[], lastUpdate: 0, display: "FPS: --" };
-        let PHYSICS_MAP = null; 
+        // --- 3. FUTURE-PROOF ARCHITECTURE DATA ---
+        const ITEM_REGISTRY = {}; // For future equipable/usable items
+        let STRUCTURES = [];      // Replaces BASES. Persistent buildings.
+        const CHUNK_SIZE = 800;
+        const ACTIVE_CHUNKS = new Map(); // key: "cx,cy", val: { canvas, physicsMap }
+        
         let SEED = 1;
-        let SHOPS =[
-            { id: 'med', type: 'med', x: 1550, y: 1550, w: 60, h: 60, tier: 0, unlocked: false, color: '#444', icon: '+' },
-            { id: 'cash', type: 'cash', x: 1650, y: 1550, w: 60, h: 60, tier: 0, unlocked: false, color: '#444', icon: '$' }
-        ];
-        let shopTimer = 0, enemySpawnTimer = 0, saveTimer = 0;
         let PLAYER = { 
-            x: 1600, y: 1600, radius: 20, cooldown: 0, bodyAngle: 0, turretAngle: 0, hp: 5, maxHp: 5, cash: 0, passiveIncome: 0,
-            inventory: { parts: 0, hasNewItem: false }, respawnX: 1600, respawnY: 1600
+            x: 1600, y: 1600, radius: 20, bodyAngle: 0, turretAngle: 0, cooldown: 0, respawnX: 1600, respawnY: 1600,
+            hasSeenBaseCraft: false,
+            stats: { maxHp: 5, hp: 5, baseSpeed: 250, baseFireRate: 1.0, damageMult: 1 },
+            equipment: { weapon: 'standard', skin: 'default' },
+            modifiers: [],
+            inventory: { resources: { parts: 0, cash: 0 }, items: [] },
+            passiveIncome: 0
         };
-        let BULLETS =[], PARTICLES =[], ENEMIES = [], LOOT =[], FLOOR_LOOT = [], BASES = [];
+        
+        let BULLETS =[], PARTICLES =[], ENEMIES = [], LOOT =[], FLOOR_LOOT = [];
+        let enemySpawnTimer = 0, saveTimer = 0;
+        const CAMERA = { x: 0, y: 0, zoom: 1.0, baseZoom: 1.0 };
+        const FPS = { buffer:[], lastUpdate: 0 };
+        
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d', { alpha: false });
-        let worldCanvas = null;
+        
+        const INPUT = { keys: {}, mouse: { x:0, y:0, down:false }, touches: { leftId:null, rightId:null, leftStart:{x:0,y:0}, leftCurr:{x:0,y:0}, rightStart:{x:0,y:0}, rightCurr:{x:0,y:0} }, moveVector: {x:0,y:0}, aimAngle: 0, isFiring: false, lastAimTime: 0 };
 
-        const INPUT = {
-            keys: {},
-            mouse: { x: 0, y: 0, down: false },
-            touches: { leftId: null, rightId: null, leftStart: {x:0,y:0}, leftCurr: {x:0,y:0}, rightStart: {x:0,y:0}, rightCurr: {x:0,y:0} },
-            moveVector: { x: 0, y: 0 },
-            aimAngle: 0,
-            isFiring: false,
-            lastAimTime: 0
-        };
-
-        function log(msg) { console.log(msg); }
-        function resize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            if (!STATE.gameStarted) { 
-                CAMERA.x = PLAYER.x - (canvas.width/2)/CAMERA.zoom; 
-                CAMERA.y = PLAYER.y - (canvas.height/2)/CAMERA.zoom; 
-            }
-        }
-        function resetInputs() {
-            INPUT.keys = {}; INPUT.mouse.down = false; 
-            INPUT.touches.leftId = null; INPUT.touches.rightId = null; 
-            INPUT.moveVector = {x:0,y:0}; INPUT.isFiring = false; 
-            STATE.manualFirePressed = false;
-        }
-        function mulberry32(a) {
-            return function() {
-              var t = a += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-              return ((t ^ t >>> 14) >>> 0) / 4294967296;
-            }
-        }
+        // --- 4. UTILS & MATH ---
+        const Noise = (function() {
+            const p = new Uint8Array(512), permutation =[151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,190,6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,125,136,171,168,68,175,74,165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,102,143,54,65,25,63,161,1,216,80,73,209,76,132,187,208,89,18,169,200,196,135,130,116,188,159,86,164,100,109,198,173,186,3,64,52,217,226,250,124,123,5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,223,183,170,213,119,248,152,2,44,154,163,70,221,153,101,155,167,43,172,9,129,22,39,253,19,98,108,110,79,113,224,232,178,185,112,104,218,246,97,228,251,34,242,193,238,210,144,12,191,179,162,241,81,51,145,235,249,14,239,107,49,192,214,31,181,199,106,157,184,84,204,176,115,121,50,45,127,4,150,254,138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180];
+            for (let i=0; i<256; i++) p[256+i] = p[i] = permutation[i];
+            function fade(t) { return t*t*t*(t*(t*6-15)+10); } function lerp(t,a,b) { return a+t*(b-a); }
+            function grad(hash,x,y,z) { const h=hash&15, u=h<8?x:y, v=h<4?y:h==12||h==14?x:z; return ((h&1)==0?u:-u)+((h&2)==0?v:-v); }
+            return { perlin2: function(x, y) { const X=Math.floor(x)&255, Y=Math.floor(y)&255; x-=Math.floor(x); y-=Math.floor(y); const u=fade(x), v=fade(y), A=p[X]+Y, AA=p[A], AB=p[A+1], B=p[X+1]+Y, BA=p[B], BB=p[B+1]; return lerp(v, lerp(u, grad(p[AA], x, y, 0), grad(p[BA], x-1, y, 0)), lerp(u, grad(p[AB], x, y-1, 0), grad(p[BB], x-1, y-1, 0))); } };
+        })();
+        function mulberry32(a) { return function() { var t=a+=0x6D2B79F5; t=Math.imul(t^t>>>15,t|1); t^=t+Math.imul(t^t>>>7,t|61); return ((t^t>>>14)>>>0)/4294967296; } }
         let rng = mulberry32(1);
-        function formatMoney(amount) {
-            if (amount < 1000) return "$" + amount.toFixed(2);
-            if (amount < 1000000) return "$" + (amount/1000).toFixed(2) + "k";
-            if (amount < 1000000000) return "$" + (amount/1000000).toFixed(2) + "m";
-            return "$" + (amount/1000000000).toFixed(2) + "b";
-        }
-        function lighten(c, p) { const n=parseInt(c.replace("#",""),16),a=Math.round(2.55*p),R=(n>>16)+a,B=(n>>8&0x00FF)+a,G=(n&0x0000FF)+a; return "#"+(0x1000000+(R<255?R<1?0:R:255)*0x10000+(B<255?B<1?0:B:255)*0x100+(G<255?G<1?0:G:255)).toString(16).slice(1); }
+        function resetInputs() { INPUT.keys={}; INPUT.mouse.down=false; INPUT.touches={leftId:null, rightId:null, leftStart:{x:0,y:0}, leftCurr:{x:0,y:0}, rightStart:{x:0,y:0}, rightCurr:{x:0,y:0}}; INPUT.moveVector={x:0,y:0}; INPUT.isFiring=false; STATE.manualFirePressed=false; }
+        function lighten(c,p) { const n=parseInt(c.replace("#",""),16),a=Math.round(2.55*p),R=(n>>16)+a,B=(n>>8&0x00FF)+a,G=(n&0x0000FF)+a; return "#"+(0x1000000+(R<255?R<1?0:R:255)*0x10000+(B<255?B<1?0:B:255)*0x100+(G<255?G<1?0:G:255)).toString(16).slice(1); }
+        function getPlayerStat(stat) { return PLAYER.stats[stat]; } // Future hook for equipment modifiers
 
         // --- 5. AUDIO ---
-        let audioCtx = null;
-        let splashBuffer = null;
-        let sandBuffer = null;
+        let audioCtx, splashBuf, sandBuf;
         function initAudio() {
-            if (STATE.audioInitialized) return;
-            try {
-                const AC = window.AudioContext || window.webkitAudioContext;
-                audioCtx = new AC();
-                STATE.audioInitialized = true;
-                createBuffers();
-            } catch (e) { console.error("Audio Error", e); }
-        }
-        function createBuffers() {
-            if (!audioCtx) return;
-            let sb = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.5, audioCtx.sampleRate);
-            let d = sb.getChannelData(0);
-            for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i/d.length);
-            splashBuffer = sb;
-            let sdb = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.2, audioCtx.sampleRate);
-            let d2 = sdb.getChannelData(0);
-            for (let i = 0; i < d2.length; i++) d2[i] = (Math.random() * 2 - 1) * 0.5;
-            sandBuffer = sdb;
+            if(STATE.audioInitialized) return;
+            try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); STATE.audioInitialized = true;
+                let sb = audioCtx.createBuffer(1, audioCtx.sampleRate*0.5, audioCtx.sampleRate), d=sb.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length); splashBuf=sb;
+                let sdb = audioCtx.createBuffer(1, audioCtx.sampleRate*0.2, audioCtx.sampleRate), d2=sdb.getChannelData(0); for(let i=0;i<d2.length;i++) d2[i]=(Math.random()*2-1)*0.5; sandBuf=sdb;
+            } catch(e) {}
         }
         function playSound(type) {
-            if (!audioCtx || audioCtx.state !== 'running') return;
-            const gain = audioCtx.createGain(); gain.connect(audioCtx.destination);
-            const t = audioCtx.currentTime;
-            if (type === 'shoot') {
-                const o = audioCtx.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(400, t); o.frequency.exponentialRampToValueAtTime(100, t+0.1);
-                gain.gain.setValueAtTime(0.05, t); gain.gain.exponentialRampToValueAtTime(0.01, t+0.1); o.connect(gain); o.start(); o.stop(t+0.1);
-            } else if (type === 'enemy_shoot') {
-                const o = audioCtx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(200, t); o.frequency.exponentialRampToValueAtTime(50, t+0.15);
-                gain.gain.setValueAtTime(0.06, t); gain.gain.exponentialRampToValueAtTime(0.01, t+0.15); o.connect(gain); o.start(); o.stop(t+0.15);
-            } else if (type === 'splash' && splashBuffer) {
-                const s = audioCtx.createBufferSource(); s.buffer = splashBuffer; const f = audioCtx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 1000;
-                s.connect(f); f.connect(gain); gain.gain.value = 0.2; s.start();
-            } else if (type === 'sand' && sandBuffer) {
-                const s = audioCtx.createBufferSource(); s.buffer = sandBuffer; const f = audioCtx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 400;
-                s.connect(f); f.connect(gain); gain.gain.value = 0.1; s.start();
-            } else if (type === 'pickup') {
-                const o = audioCtx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(600, t); o.frequency.linearRampToValueAtTime(1200, t+0.1);
-                gain.gain.setValueAtTime(0.1, t); gain.gain.linearRampToValueAtTime(0, t+0.1); o.connect(gain); o.start(); o.stop(t+0.1);
+            if(!audioCtx || audioCtx.state !== 'running') return;
+            const g = audioCtx.createGain(), t = audioCtx.currentTime; g.connect(audioCtx.destination);
+            if(type==='shoot') { const o=audioCtx.createOscillator(); o.type='square'; o.frequency.setValueAtTime(400,t); o.frequency.exponentialRampToValueAtTime(100,t+0.1); g.gain.setValueAtTime(0.05,t); g.gain.exponentialRampToValueAtTime(0.01,t+0.1); o.connect(g); o.start(); o.stop(t+0.1); }
+            else if(type==='pickup') { const o=audioCtx.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(600,t); o.frequency.linearRampToValueAtTime(1200,t+0.1); g.gain.setValueAtTime(0.1,t); g.gain.linearRampToValueAtTime(0,t+0.1); o.connect(g); o.start(); o.stop(t+0.1); }
+            else if(type==='splash' && splashBuf) { const s=audioCtx.createBufferSource(), f=audioCtx.createBiquadFilter(); s.buffer=splashBuf; f.type="lowpass"; f.frequency.value=1000; s.connect(f); f.connect(g); g.gain.value=0.2; s.start(); }
+            else if(type==='sand' && sandBuf) { const s=audioCtx.createBufferSource(), f=audioCtx.createBiquadFilter(); s.buffer=sandBuf; f.type="lowpass"; f.frequency.value=400; s.connect(f); f.connect(g); g.gain.value=0.1; s.start(); }
+        }
+
+        // --- 6. CHUNKING ENGINE ---
+        function getChunkTerrain(globalX, globalY) {
+            const cx = Math.floor(globalX / CHUNK_SIZE), cy = Math.floor(globalY / CHUNK_SIZE);
+            const chunk = ACTIVE_CHUNKS.get(`${cx},${cy}`);
+            if(!chunk) return 0; // default land
+            const lx = ((Math.floor(globalX) % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+            const ly = ((Math.floor(globalY) % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+            return chunk.physicsMap[ly * CHUNK_SIZE + lx];
+        }
+
+        function generateChunk(cx, cy) {
+            const key = `${cx},${cy}`;
+            if (ACTIVE_CHUNKS.has(key)) return ACTIVE_CHUNKS.get(key);
+            
+            const ps = CHUNK_SIZE + 2; const tempMap = new Uint8Array(ps * ps);
+            const scale = WORLD_CONFIG.noiseScale;
+            
+            // 1. Noise
+            for (let y = -1; y <= CHUNK_SIZE; y++) {
+                for (let x = -1; x <= CHUNK_SIZE; x++) {
+                    const gx = cx * CHUNK_SIZE + x, gy = cy * CHUNK_SIZE + y;
+                    let n = Noise.perlin2(gx * scale, gy * scale) + 0.5 * Noise.perlin2(gx * scale * 3, gy * scale * 3);
+                    const idx = (y+1) * ps + (x+1);
+                    if (n < WORLD_CONFIG.waterThreshold) tempMap[idx] = 1;
+                    else if (n < WORLD_CONFIG.sandThreshold) tempMap[idx] = 3;
+                    else tempMap[idx] = 0;
+                }
+            }
+            
+            // 2. Despeckle & Save
+            const pMap = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE);
+            const c = document.createElement('canvas'); c.width = CHUNK_SIZE; c.height = CHUNK_SIZE;
+            const cCtx = c.getContext('2d', {alpha:false});
+            const img = cCtx.createImageData(CHUNK_SIZE, CHUNK_SIZE);
+            
+            for (let y = 0; y < CHUNK_SIZE; y++) {
+                for (let x = 0; x < CHUNK_SIZE; x++) {
+                    const idx = (y+1) * ps + (x+1);
+                    let type = tempMap[idx];
+                    if (type === 1 || type === 3) {
+                        let neighbors = 0;
+                        for(let dy=-1; dy<=1; dy++) for(let dx=-1; dx<=1; dx++) if(tempMap[(y+1+dy)*ps + (x+1+dx)] === type) neighbors++;
+                        if (neighbors < 5) type = 0;
+                    }
+                    const pIdx = y * CHUNK_SIZE + x; pMap[pIdx] = type;
+                    const i = pIdx * 4;
+                    if (type === 1) { img.data[i]=26; img.data[i+1]=38; img.data[i+2]=47; img.data[i+3]=255; }
+                    else if (type === 3) { const g=(rng()-0.5)*20; img.data[i]=210+g; img.data[i+1]=180+g; img.data[i+2]=140+g; img.data[i+3]=255; }
+                    else { const g=(rng()-0.5)*20; img.data[i]=75+g; img.data[i+1]=83+g; img.data[i+2]=32+g; img.data[i+3]=255; }
+                }
+            }
+            cCtx.putImageData(img, 0, 0);
+            
+            const chunk = { canvas: c, physicsMap: pMap };
+            ACTIVE_CHUNKS.set(key, chunk);
+            return chunk;
+        }
+
+        function seedWorldLoot() {
+            FLOOR_LOOT = [];
+            for (let i=0; i<WORLD_CONFIG.lootDensity; i++) {
+                let lx = rng() * 3200, ly = rng() * 3200; // Seed around spawn
+                let r = rng(); let qty = r < 0.8 ? 1 : r < 0.98 ? 3 : 10;
+                FLOOR_LOOT.push({ x: lx, y: ly, qty: qty });
             }
         }
 
-        // --- 6. PERSISTENCE ---
+        // --- 7. PERSISTENCE ---
         function loadSettings() {
             try {
-                const saved = localStorage.getItem(SETTINGS_KEY);
-                if (saved) {
-                    const s = JSON.parse(saved);
+                const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
+                if (s) {
                     if (s.showFPS !== undefined) STATE.showFPS = s.showFPS;
                     if (s.autoFireMode !== undefined) STATE.autoFireMode = s.autoFireMode;
                     if (s.staticJoysticks !== undefined) STATE.staticJoysticks = s.staticJoysticks;
                     if (s.tapToFire !== undefined) STATE.tapToFire = s.tapToFire;
+                    if (s.WORLD_CONFIG) WORLD_CONFIG = { ...WORLD_CONFIG, ...s.WORLD_CONFIG };
                 }
-            } catch (e) { console.error(e); }
+            } catch(e) {}
         }
         function loadGame() {
             try {
                 const save = localStorage.getItem(SAVE_KEY);
                 if (save) {
-                    const d = JSON.parse(save);
-                    SEED = d.seed; 
-                    PLAYER = { ...PLAYER, ...d.player };
-                    if (!PLAYER.inventory) PLAYER.inventory = { parts: 0, hasNewItem: false };
-                    if (PLAYER.respawnX === undefined) { PLAYER.respawnX = 1600; PLAYER.respawnY = 1600; }
-                    ENEMIES = d.enemies || []; 
-                    LOOT = d.loot || []; 
-                    SHOPS = d.shops || SHOPS;
-                    FLOOR_LOOT = d.floorLoot || [];
-                    BASES = d.bases || [];
-                    STATE.hasSavedData = true;
+                    const d = JSON.parse(save); SEED = d.seed; PLAYER = { ...PLAYER, ...d.player };
+                    // Migration from old inventory styles
+                    if (PLAYER.cash !== undefined) { PLAYER.inventory.resources.cash = PLAYER.cash; delete PLAYER.cash; }
+                    if (PLAYER.inventory.parts !== undefined) { PLAYER.inventory.resources.parts = PLAYER.inventory.parts; delete PLAYER.inventory.parts; }
+                    
+                    ENEMIES = d.enemies || []; LOOT = d.loot || []; FLOOR_LOOT = d.floorLoot || [];
+                    STRUCTURES = d.structures || d.bases || []; // Handle old base saves
                     console.log("Game Loaded. Seed: " + SEED);
-                } else {
-                    SEED = Math.floor(Math.random() * 1000000);
-                    console.log("New Game. Seed: " + SEED);
-                }
+                } else { SEED = Math.floor(Math.random() * 1000000); console.log("New Game. Seed: " + SEED); seedWorldLoot(); }
                 rng = mulberry32(SEED);
-            } catch (e) { console.error(e); SEED = Math.floor(Math.random() * 1000000); rng = mulberry32(SEED); }
+            } catch(e) { SEED = Math.floor(Math.random() * 1000000); rng = mulberry32(SEED); seedWorldLoot(); }
         }
         function saveGame() {
-            const data = { seed: SEED, player: PLAYER, enemies: ENEMIES, loot: LOOT, shops: SHOPS, floorLoot: FLOOR_LOOT, bases: BASES };
-            localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-            const settings = { showFPS: STATE.showFPS, autoFireMode: STATE.autoFireMode, staticJoysticks: STATE.staticJoysticks, tapToFire: STATE.tapToFire };
-            localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-            console.log("Game Saved");
-        }
-        function startOver() {
-            if (confirm("Are you sure? This will delete your world and progress.")) { localStorage.removeItem(SAVE_KEY); location.reload(); }
-        }
-        function clearSettings() {
-            if (confirm("Reset settings to default? World data will be kept.")) { localStorage.removeItem(SETTINGS_KEY); location.reload(); }
+            localStorage.setItem(SAVE_KEY, JSON.stringify({ seed: SEED, player: PLAYER, enemies: ENEMIES, loot: LOOT, floorLoot: FLOOR_LOOT, structures: STRUCTURES }));
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify({ showFPS: STATE.showFPS, autoFireMode: STATE.autoFireMode, staticJoysticks: STATE.staticJoysticks, tapToFire: STATE.tapToFire, WORLD_CONFIG }));
         }
 
-        // --- 7. INPUT HELPERS ---
-        function updateManualFireButton() {
-            const btn = document.getElementById('btn-manual-fire');
-            if(btn) btn.style.display = (STATE.isMobile && STATE.autoFireMode === 2 && !STATE.tapToFire) ? 'block' : 'none';
-        }
-
-        // --- 8. ENTITY HELPERS ---
-        function spawnEnemy() {
-            if (!PHYSICS_MAP) return;
-            let safe = false, ex, ey, attempts=0;
-            while(!safe && attempts<100) {
-                attempts++;
-                ex = rng() * CONFIG.worldSize;
-                ey = rng() * CONFIG.worldSize;
-                const idx = Math.max(0, Math.min(Math.floor(ey) * CONFIG.worldSize + Math.floor(ex), CONFIG.worldSize * CONFIG.worldSize - 1));
-                if (PHYSICS_MAP && PHYSICS_MAP[idx] !== 1 && Math.hypot(ex-PLAYER.x, ey-PLAYER.y) > 800) safe = true;
-            }
-            if (safe) ENEMIES.push({ x: ex, y: ey, angle: 0, cooldown: rng()*2, hp: 3, maxHp: 3, radius: 20 });
-        }
-        function spawnEnemies() {
-            if (!PHYSICS_MAP) return;
-            ENEMIES =[];
-            for(let i=0; i<5; i++) spawnEnemy();
-        }
-        function fireWeapon(source, type) {
-            if (type === 'player') playSound('shoot'); else playSound('enemy_shoot');
-            const angle = (type === 'player') ? source.turretAngle : source.angle;
-            BULLETS.push({ x: source.x + Math.cos(angle)*35, y: source.y + Math.sin(angle)*35, vx: Math.cos(angle)*CONFIG.bulletSpeed, vy: Math.sin(angle)*CONFIG.bulletSpeed, life: CONFIG.bulletLife, owner: type });
-        }
-        function dropLoot(x, y) {
-            const rand = Math.random();
-            let type = (PLAYER.hp === PLAYER.maxHp) ? (rand < 0.49 ? 2 : 1) : (rand < 0.33 ? 0 : rand < 0.66 ? 2 : 1);
-            LOOT.push({ x, y, type });
-        }
-        function updateHUD() {
-            const pct = (PLAYER.hp / PLAYER.maxHp) * 100;
-            document.getElementById('hud-hp-fill').style.width = `${pct}%`;
-            document.getElementById('hud-hp-text').innerText = `${PLAYER.hp.toFixed(1)}/${PLAYER.maxHp}`;
-            document.getElementById('inv-cash').innerText = formatMoney(PLAYER.cash);
-            document.getElementById('inv-parts').innerText = `${PLAYER.inventory.parts} 🔩`;
-            document.getElementById('inv-badge').style.display = PLAYER.inventory.hasNewItem ? 'block' : 'none';
-        }
-        function showZoneMsg(msg) {
-            const el = document.getElementById('hud-zone-msg'); el.innerText = msg; el.style.opacity = 1;
-            setTimeout(() => { if(el.innerText === msg) el.style.opacity = 0; }, 2000);
-        }
-        function doGameOver() {
-            STATE.gameOver = true;
-            if (PLAYER.cash > 0) { 
-                LOOT.push({ x: PLAYER.x, y: PLAYER.y, type: 3, value: PLAYER.cash });
-                const bags = LOOT.filter(l => l.type === 3);
-                if (bags.length > 10) { const oldest = bags[0]; const idx = LOOT.indexOf(oldest); if (idx > -1) LOOT.splice(idx, 1); }
-                PLAYER.cash = 0; updateHUD(); 
-            }
-            saveGame();
-            document.getElementById('game-over-screen').style.display = 'flex';
-        }
-        function respawn() {
-            PLAYER.hp = PLAYER.maxHp; PLAYER.x = PLAYER.respawnX; PLAYER.y = PLAYER.respawnY; STATE.gameOver = false; BULLETS =[]; updateHUD();
-            document.getElementById('game-over-screen').style.display = 'none';
-            resetInputs(); CAMERA.x = PLAYER.x - (canvas.width/2)/CAMERA.zoom; CAMERA.y = PLAYER.y - (canvas.height/2)/CAMERA.zoom;
-            saveGame();
-        }
-
-        function checkShops() {
-            for (let s of SHOPS) {
-                const cx = s.x + s.w/2;
-                const cy = s.y + s.h/2;
-                if (Math.hypot(PLAYER.x - cx, PLAYER.y - cy) < s.w) {
-                    const tierList = TIERS[s.type];
-                    if (s.tier < tierList.length) {
-                        const cost = tierList[s.tier].price;
-                        if (PLAYER.cash >= cost) {
-                            PLAYER.cash -= cost;
-                            s.tier++;
-                            s.unlocked = true;
-                            if (s.type === 'med') {
-                                PLAYER.maxHp += tierList[s.tier-1].rate;
-                                PLAYER.hp = PLAYER.maxHp;
-                            } else if (s.type === 'cash') {
-                                PLAYER.passiveIncome = tierList[s.tier-1].rate;
-                            }
-                            playSound('pickup');
-                            showZoneMsg(`${s.type.toUpperCase()} UPGRADED!`);
-                            saveGame();
-                        } else if (!s.unlocked) {
-                            showZoneMsg(`Need $${cost}`);
-                        }
-                    } else {
-                        showZoneMsg(`MAX TIER`);
-                    }
-                }
-            }
-        }
-
-        // --- 9. PHYSICS & INPUT HANDLERS ---
+        // --- 8. INPUTS & HOTKEYS ---
         window.setupInputs = function() {
-            window.addEventListener('keydown', e => INPUT.keys[e.key.toLowerCase()] = true);
-            window.addEventListener('keyup', e => INPUT.keys[e.key.toLowerCase()] = false);
-            
-            canvas.addEventListener('mousemove', e => {
-                INPUT.mouse.x = e.clientX;
-                INPUT.mouse.y = e.clientY;
+            window.addEventListener('keydown', e => { 
+                if(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+                INPUT.keys[e.code] = true;
+                if(e.code === 'KeyI') document.getElementById('hud-inventory').click();
+                if(e.code === 'KeyZ') document.getElementById('btn-zoom').click();
+                if(e.code === 'Escape') togglePause();
+                if(e.code === 'Space') INPUT.isFiring = true;
             });
-            canvas.addEventListener('mousedown', e => {
-                INPUT.mouse.down = true;
-                INPUT.mouse.x = e.clientX;
-                INPUT.mouse.y = e.clientY;
-            });
+            window.addEventListener('keyup', e => { INPUT.keys[e.code] = false; if(e.code === 'Space') INPUT.isFiring = false; });
+            canvas.addEventListener('mousemove', e => { INPUT.mouse.x = e.clientX; INPUT.mouse.y = e.clientY; });
+            canvas.addEventListener('mousedown', e => { INPUT.mouse.down = true; INPUT.mouse.x = e.clientX; INPUT.mouse.y = e.clientY; });
             window.addEventListener('mouseup', () => INPUT.mouse.down = false);
+            window.addEventListener('contextmenu', e => { resetInputs(); });
+            window.addEventListener('blur', () => { resetInputs(); togglePause(true); });
 
             const handleTouch = (e) => {
-                e.preventDefault();
-                if (!STATE.isMobile) {
-                    STATE.isMobile = true;
-                    updateManualFireButton();
-                }
-                
-                const currentTouches = Array.from(e.touches);
-                const touchIds = currentTouches.map(t => t.identifier);
-
+                e.preventDefault(); if (!STATE.isMobile) { STATE.isMobile = true; updateUIState(); }
+                const touchIds = Array.from(e.touches).map(t => t.identifier);
                 if (INPUT.touches.leftId !== null && !touchIds.includes(INPUT.touches.leftId)) INPUT.touches.leftId = null;
                 if (INPUT.touches.rightId !== null && !touchIds.includes(INPUT.touches.rightId)) INPUT.touches.rightId = null;
 
                 for (let i = 0; i < e.changedTouches.length; i++) {
-                    const t = e.changedTouches[i];
-                    const isLeft = t.clientX < window.innerWidth / 2;
-                    
+                    const t = e.changedTouches[i]; const isLeft = t.clientX < window.innerWidth / 2;
                     if (e.type === 'touchstart') {
-                        if (isLeft && INPUT.touches.leftId === null) {
-                            INPUT.touches.leftId = t.identifier;
-                            INPUT.touches.leftStart = { x: t.clientX, y: t.clientY };
-                            INPUT.touches.leftCurr = { x: t.clientX, y: t.clientY };
-                        } else if (!isLeft && INPUT.touches.rightId === null) {
-                            INPUT.touches.rightId = t.identifier;
-                            INPUT.touches.rightStart = { x: t.clientX, y: t.clientY };
-                            INPUT.touches.rightCurr = { x: t.clientX, y: t.clientY };
-                        }
+                        if (isLeft && INPUT.touches.leftId === null) { INPUT.touches.leftId = t.identifier; INPUT.touches.leftStart = { x: t.clientX, y: t.clientY }; INPUT.touches.leftCurr = { x: t.clientX, y: t.clientY }; }
+                        else if (!isLeft && INPUT.touches.rightId === null) { INPUT.touches.rightId = t.identifier; INPUT.touches.rightStart = { x: t.clientX, y: t.clientY }; INPUT.touches.rightCurr = { x: t.clientX, y: t.clientY }; }
                     } else if (e.type === 'touchmove') {
-                        if (t.identifier === INPUT.touches.leftId) {
-                            INPUT.touches.leftCurr = { x: t.clientX, y: t.clientY };
-                        } else if (t.identifier === INPUT.touches.rightId) {
-                            INPUT.touches.rightCurr = { x: t.clientX, y: t.clientY };
-                        }
+                        if (t.identifier === INPUT.touches.leftId) INPUT.touches.leftCurr = { x: t.clientX, y: t.clientY };
+                        else if (t.identifier === INPUT.touches.rightId) INPUT.touches.rightCurr = { x: t.clientX, y: t.clientY };
                     }
                 }
             };
-
-            canvas.addEventListener('touchstart', handleTouch, { passive: false });
-            canvas.addEventListener('touchmove', handleTouch, { passive: false });
-            canvas.addEventListener('touchend', handleTouch, { passive: false });
-            canvas.addEventListener('touchcancel', handleTouch, { passive: false });
+            canvas.addEventListener('touchstart', handleTouch, { passive: false }); canvas.addEventListener('touchmove', handleTouch, { passive: false });
+            canvas.addEventListener('touchend', handleTouch, { passive: false }); canvas.addEventListener('touchcancel', handleTouch, { passive: false });
         };
 
-        function handleInput(dt) {
+        function handleInput() {
             if (STATE.isMobile) {
                 if (INPUT.touches.leftId !== null) {
-                    const dx = INPUT.touches.leftCurr.x - INPUT.touches.leftStart.x;
-                    const dy = INPUT.touches.leftCurr.y - INPUT.touches.leftStart.y;
+                    const dx = INPUT.touches.leftCurr.x - INPUT.touches.leftStart.x, dy = INPUT.touches.leftCurr.y - INPUT.touches.leftStart.y;
                     const dist = Math.sqrt(dx*dx + dy*dy);
-                    if (dist > 0) {
-                        const power = Math.min(dist, 50) / 50;
-                        INPUT.moveVector = { x: (dx/dist)*power, y: (dy/dist)*power };
-                    }
-                } else {
-                    INPUT.moveVector = { x: 0, y: 0 };
-                }
+                    if (dist > 0) { const power = Math.min(dist, 50) / 50; INPUT.moveVector = { x: (dx/dist)*power, y: (dy/dist)*power }; }
+                } else INPUT.moveVector = { x: 0, y: 0 };
                 
                 if (INPUT.touches.rightId !== null) {
-                    const start = INPUT.touches.rightStart;
-                    const curr = INPUT.touches.rightCurr;
-                    const dx = curr.x - start.x, dy = curr.y - start.y;
-                    const dist = Math.sqrt(dx*dx + dy*dy);
-                    const isMoved = (dist / 50) > CONFIG.joystickDeadzone;
+                    const dx = INPUT.touches.rightCurr.x - INPUT.touches.rightStart.x, dy = INPUT.touches.rightCurr.y - INPUT.touches.rightStart.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy); const isMoved = (dist / 50) > CONFIG.joystickDeadzone;
                     if (isMoved) { INPUT.aimAngle = Math.atan2(dy, dx); INPUT.lastAimTime = Date.now(); }
                     if (!STATE.placementMode) {
-                        if (STATE.autoFireMode === 0) INPUT.isFiring = true;
-                        else if (STATE.autoFireMode === 1) INPUT.isFiring = isMoved;
-                        else if (STATE.autoFireMode === 3) INPUT.isFiring = !isMoved;
-                        else INPUT.isFiring = STATE.manualFirePressed;
+                        if (STATE.autoFireMode === 0) INPUT.isFiring = true; else if (STATE.autoFireMode === 1) INPUT.isFiring = isMoved; else if (STATE.autoFireMode === 3) INPUT.isFiring = !isMoved; else INPUT.isFiring = STATE.manualFirePressed;
                     }
-                } else if (!STATE.tapToFire && !STATE.placementMode) { INPUT.isFiring = STATE.manualFirePressed; }
+                } else if (!STATE.tapToFire && !STATE.placementMode) INPUT.isFiring = STATE.manualFirePressed;
             } else {
                 INPUT.moveVector = {x:0, y:0};
-                if (INPUT.keys['w'] || INPUT.keys['arrowup']) INPUT.moveVector.y = -1;
-                if (INPUT.keys['s'] || INPUT.keys['arrowdown']) INPUT.moveVector.y = 1;
-                if (INPUT.keys['a'] || INPUT.keys['arrowleft']) INPUT.moveVector.x = -1;
-                if (INPUT.keys['d'] || INPUT.keys['arrowright']) INPUT.moveVector.x = 1;
-                if (INPUT.moveVector.x !== 0 || INPUT.moveVector.y !== 0) {
-                    const len = Math.sqrt(INPUT.moveVector.x**2 + INPUT.moveVector.y**2);
-                    INPUT.moveVector.x /= len; INPUT.moveVector.y /= len;
-                }
+                if (INPUT.keys['KeyW'] || INPUT.keys['ArrowUp']) INPUT.moveVector.y = -1; if (INPUT.keys['KeyS'] || INPUT.keys['ArrowDown']) INPUT.moveVector.y = 1;
+                if (INPUT.keys['KeyA'] || INPUT.keys['ArrowLeft']) INPUT.moveVector.x = -1; if (INPUT.keys['KeyD'] || INPUT.keys['ArrowRight']) INPUT.moveVector.x = 1;
+                if (INPUT.moveVector.x !== 0 || INPUT.moveVector.y !== 0) { const len = Math.sqrt(INPUT.moveVector.x**2 + INPUT.moveVector.y**2); INPUT.moveVector.x /= len; INPUT.moveVector.y /= len; }
                 INPUT.aimAngle = Math.atan2((INPUT.mouse.y / CAMERA.zoom + CAMERA.y) - PLAYER.y, (INPUT.mouse.x / CAMERA.zoom + CAMERA.x) - PLAYER.x);
-                INPUT.isFiring = !STATE.placementMode && INPUT.mouse.down;
+                if(!INPUT.keys['Space']) INPUT.isFiring = !STATE.placementMode && INPUT.mouse.down;
             }
             if (INPUT.moveVector.x !== 0 || INPUT.moveVector.y !== 0) PLAYER.bodyAngle = Math.atan2(INPUT.moveVector.y, INPUT.moveVector.x);
             PLAYER.turretAngle = INPUT.aimAngle;
         }
 
-        function handlePhysics(dt) {
-            let speed = CONFIG.playerSpeed;
-            const gx = Math.max(0, Math.min(Math.floor(PLAYER.x), CONFIG.worldSize-1));
-            const gy = Math.max(0, Math.min(Math.floor(PLAYER.y), CONFIG.worldSize-1));
-            const biome = PHYSICS_MAP[gy * CONFIG.worldSize + gx];
-            
-            if (biome === 1) { 
-                speed *= CONFIG.waterSpeedMult;
-                if (!STATE.wasInWater) playSound('splash');
-                if ((INPUT.moveVector.x !== 0 || INPUT.moveVector.y !== 0) && Math.random() < 0.3) PARTICLES.push({x: PLAYER.x+(Math.random()-0.5)*20, y: PLAYER.y+(Math.random()-0.5)*20, size: 3+Math.random()*4, life: 0.5, color: '#81D4FA'});
-                STATE.wasInWater = true;
-            } else if (biome === 3) {
-                speed *= CONFIG.sandSpeedMult;
-                if ((INPUT.moveVector.x !== 0 || INPUT.moveVector.y !== 0) && Math.random() < 0.2) {
-                    playSound('sand');
-                    PARTICLES.push({x: PLAYER.x+(Math.random()-0.5)*20, y: PLAYER.y+(Math.random()-0.5)*20, size: 3+Math.random()*4, life: 0.5, color: '#d2b48c'});
-                }
-                STATE.wasInWater = false;
-            } else STATE.wasInWater = false;
-
-            PLAYER.x += INPUT.moveVector.x * speed * dt;
-            PLAYER.y += INPUT.moveVector.y * speed * dt;
-            PLAYER.x = Math.max(20, Math.min(CONFIG.worldSize-20, PLAYER.x));
-            PLAYER.y = Math.max(20, Math.min(CONFIG.worldSize-20, PLAYER.y));
-
-            const tx = PLAYER.x - (canvas.width/2)/CAMERA.zoom;
-            const ty = PLAYER.y - (canvas.height/2)/CAMERA.zoom;
-            const damp = 1 - Math.exp(-CONFIG.cameraDamping * dt);
-            CAMERA.x += (tx - CAMERA.x) * damp;
-            CAMERA.y += (ty - CAMERA.y) * damp;
-
-            if (PLAYER.cooldown > 0) PLAYER.cooldown -= dt;
-            if (INPUT.isFiring && PLAYER.cooldown <= 0) {
-                fireWeapon(PLAYER, 'player');
-                PLAYER.cooldown = CONFIG.fireRate;
+        // --- 9. ENTITIES & LOOP ---
+        function updateHUD() {
+            const pct = (PLAYER.stats.hp / PLAYER.stats.maxHp) * 100;
+            document.getElementById('hud-hp-fill').style.width = `${pct}%`; document.getElementById('hud-hp-text').innerText = `${PLAYER.stats.hp.toFixed(1)}/${PLAYER.stats.maxHp}`;
+            document.getElementById('inv-cash').innerText = "$" + PLAYER.inventory.resources.cash;
+            document.getElementById('inv-parts').innerText = `${PLAYER.inventory.resources.parts} 🔩`;
+            document.getElementById('inv-badge').style.display = (PLAYER.inventory.resources.parts >= 10 && !PLAYER.hasSeenBaseCraft) ? 'block' : 'none';
+        }
+        function showZoneMsg(msg) { const el = document.getElementById('hud-zone-msg'); el.innerText = msg; el.style.opacity = 1; setTimeout(() => { if(el.innerText === msg) el.style.opacity = 0; }, 2000); }
+        
+        function updateStructures(dt) {
+            // Future hook for structure logic (healing ticks, turrets)
+            for (let s of STRUCTURES) {
+                switch(s.type) { case 'base': break; }
             }
         }
 
-        // --- 10. RENDER HELPERS ---
-        function drawTank(x, y, angle, bodyColor, turretColor, isPlayer, turretAngle) {
-            ctx.save(); ctx.translate(x, y);
-            ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.ellipse(5, 5, 20, 20, 0, 0, Math.PI*2); ctx.fill();
-            ctx.rotate(angle);
-            ctx.fillStyle = '#111'; ctx.fillRect(-22, -22, 44, 6); ctx.fillRect(-22, 16, 44, 6);
-            const bodyGrad = ctx.createLinearGradient(0, -18, 0, 18);
-            bodyGrad.addColorStop(0, bodyColor); bodyGrad.addColorStop(0.5, lighten(bodyColor, 20)); bodyGrad.addColorStop(1, bodyColor);
-            ctx.fillStyle = bodyGrad; ctx.fillRect(-20, -18, 40, 36);
-            ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(-15, -10, 5, 20); ctx.fillRect(10, -10, 5, 20);
-            ctx.restore();
-            ctx.save(); ctx.translate(x, y); ctx.rotate(isPlayer ? turretAngle : angle);
-            ctx.fillStyle = '#263238'; ctx.fillRect(0, -5, 38, 10);
-            const turretGrad = ctx.createRadialGradient(-5, -5, 2, 0, 0, 15);
-            turretGrad.addColorStop(0, lighten(turretColor, 30)); turretGrad.addColorStop(1, turretColor);
-            ctx.fillStyle = turretGrad; ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI*2); ctx.fill();
-            ctx.strokeStyle = '#263238'; ctx.lineWidth = 1; ctx.stroke();
-            ctx.restore();
-        }
-        function drawJoystick(start, curr) {
-            ctx.beginPath(); ctx.arc(start.x, start.y, 50, 0, Math.PI*2); ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth=2; ctx.stroke();
-            ctx.beginPath(); ctx.arc(curr.x, curr.y, 25, 0, Math.PI*2); ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fill();
+        function drawStructure(s, ctx) {
+            switch(s.type) {
+                case 'base':
+                    ctx.save(); ctx.translate(s.x, s.y);
+                    ctx.fillStyle = '#555'; ctx.fillRect(-150, -150, 300, 300);
+                    ctx.fillStyle = '#666'; ctx.fillRect(-140, -140, 280, 280);
+                    ctx.fillStyle = '#4CAF50'; ctx.beginPath(); ctx.arc(0,0, 20, 0, Math.PI*2); ctx.fill();
+                    ctx.restore();
+                    break;
+            }
         }
 
-        // --- 11. CORE LOOP ---
         function updateEntities(dt) {
-            // Bullets
             for (let i = BULLETS.length - 1; i >= 0; i--) {
-                let b = BULLETS[i];
-                b.x += b.vx * dt;
-                b.y += b.vy * dt;
-                b.life -= dt;
+                let b = BULLETS[i]; b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
                 if (b.life <= 0) { BULLETS.splice(i, 1); continue; }
-
-                // Bullet vs Enemy
                 if (b.owner === 'player') {
                     for (let j = ENEMIES.length - 1; j >= 0; j--) {
                         let e = ENEMIES[j];
                         if (Math.hypot(b.x - e.x, b.y - e.y) < e.radius) {
-                            e.hp -= 1;
-                            PARTICLES.push({x: b.x, y: b.y, size: 5, life: 0.2, color: '#FFEB3B'});
-                            BULLETS.splice(i, 1);
+                            e.hp -= getPlayerStat('damageMult'); PARTICLES.push({x: b.x, y: b.y, size: 5, life: 0.2, color: '#FFEB3B'}); BULLETS.splice(i, 1);
                             if (e.hp <= 0) {
-                                dropLoot(e.x, e.y);
-                                ENEMIES.splice(j, 1);
-                                PLAYER.cash += 1;
-                                updateHUD();
-                            }
-                            break;
+                                LOOT.push({x:e.x, y:e.y, type: (PLAYER.stats.hp === PLAYER.stats.maxHp) ? 2 : (Math.random()<0.33?0:2)});
+                                ENEMIES.splice(j, 1); PLAYER.inventory.resources.cash += 1; updateHUD();
+                            } break;
                         }
                     }
                 } else if (b.owner === 'enemy') {
                     if (Math.hypot(b.x - PLAYER.x, b.y - PLAYER.y) < PLAYER.radius) {
-                        PLAYER.hp -= 1;
-                        PARTICLES.push({x: b.x, y: b.y, size: 5, life: 0.2, color: '#FF5252'});
-                        BULLETS.splice(i, 1);
-                        updateHUD();
-                        if (PLAYER.hp <= 0) doGameOver();
+                        PLAYER.stats.hp -= 1; PARTICLES.push({x: b.x, y: b.y, size: 5, life: 0.2, color: '#FF5252'}); BULLETS.splice(i, 1); updateHUD();
+                        if (PLAYER.stats.hp <= 0) doGameOver();
                     }
                 }
             }
-
-            // Enemies
             for (let e of ENEMIES) {
-                const dx = PLAYER.x - e.x;
-                const dy = PLAYER.y - e.y;
-                const dist = Math.hypot(dx, dy);
-                e.angle = Math.atan2(dy, dx);
-                
-                if (dist > 200) {
-                    e.x += Math.cos(e.angle) * 100 * dt;
-                    e.y += Math.sin(e.angle) * 100 * dt;
-                }
-                
-                e.cooldown -= dt;
-                if (dist < 400 && e.cooldown <= 0) {
-                    fireWeapon(e, 'enemy');
-                    e.cooldown = 1.5 + Math.random();
-                }
+                const dx = PLAYER.x - e.x, dy = PLAYER.y - e.y, dist = Math.hypot(dx, dy); e.angle = Math.atan2(dy, dx);
+                if (dist > 200) { e.x += Math.cos(e.angle) * 100 * dt; e.y += Math.sin(e.angle) * 100 * dt; }
+                e.cooldown -= dt; if (dist < 400 && e.cooldown <= 0) { playSound('enemy_shoot'); BULLETS.push({ x: e.x + Math.cos(e.angle)*35, y: e.y + Math.sin(e.angle)*35, vx: Math.cos(e.angle)*CONFIG.bulletSpeed, vy: Math.sin(e.angle)*CONFIG.bulletSpeed, life: CONFIG.bulletLife, owner: 'enemy' }); e.cooldown = 1.5 + Math.random(); }
             }
-
-            // Cash Loot
             for (let i = LOOT.length - 1; i >= 0; i--) {
                 let l = LOOT[i];
                 if (Math.hypot(PLAYER.x - l.x, PLAYER.y - l.y) < PLAYER.radius + 20) {
                     playSound('pickup');
-                    if (l.type === 0) PLAYER.hp = Math.min(PLAYER.maxHp, PLAYER.hp + 1);
-                    else if (l.type === 1) PLAYER.cash += 1;
-                    else if (l.type === 2) PLAYER.cash += 5;
-                    else if (l.type === 3) PLAYER.cash += l.value;
-                    LOOT.splice(i, 1);
-                    updateHUD();
+                    if (l.type === 0) PLAYER.stats.hp = Math.min(PLAYER.stats.maxHp, PLAYER.stats.hp + 1);
+                    else if (l.type === 1) PLAYER.inventory.resources.cash += 1;
+                    else if (l.type === 2) PLAYER.inventory.resources.cash += 5;
+                    LOOT.splice(i, 1); updateHUD();
                 }
             }
-
-            // Floor Loot (Parts)
             for (let i = FLOOR_LOOT.length - 1; i >= 0; i--) {
                 let l = FLOOR_LOOT[i];
                 if (Math.hypot(PLAYER.x - l.x, PLAYER.y - l.y) < PLAYER.radius + 15) {
-                    playSound('pickup');
-                    PLAYER.inventory.parts += l.qty;
-                    if (!PLAYER.inventory.hasNewItem) PLAYER.inventory.hasNewItem = true;
-                    FLOOR_LOOT.splice(i, 1);
-                    updateHUD();
+                    playSound('pickup'); PLAYER.inventory.resources.parts += l.qty; FLOOR_LOOT.splice(i, 1); updateHUD();
                 }
             }
+            for (let i = PARTICLES.length - 1; i >= 0; i--) { PARTICLES[i].life -= dt; if (PARTICLES[i].life <= 0) PARTICLES.splice(i, 1); }
+        }
 
-            // Particles
-            for (let i = PARTICLES.length - 1; i >= 0; i--) {
-                PARTICLES[i].life -= dt;
-                if (PARTICLES[i].life <= 0) PARTICLES.splice(i, 1);
+        function handlePhysics(dt) {
+            let speed = getPlayerStat('baseSpeed');
+            const biome = getChunkTerrain(PLAYER.x, PLAYER.y);
+            
+            // Check structures (bases act as concrete overriding terrain)
+            let onBase = false;
+            for(let s of STRUCTURES) if(s.type === 'base' && Math.abs(PLAYER.x - s.x) < 150 && Math.abs(PLAYER.y - s.y) < 150) onBase = true;
+
+            if (!onBase) {
+                if (biome === 1) { speed *= CONFIG.waterSpeedMult; if (!STATE.wasInWater) playSound('splash'); if ((INPUT.moveVector.x||INPUT.moveVector.y) && Math.random()<0.3) PARTICLES.push({x: PLAYER.x+(Math.random()-0.5)*20, y: PLAYER.y+(Math.random()-0.5)*20, size: 3+Math.random()*4, life: 0.5, color: '#81D4FA'}); STATE.wasInWater = true; }
+                else if (biome === 3) { speed *= CONFIG.sandSpeedMult; if ((INPUT.moveVector.x||INPUT.moveVector.y) && Math.random()<0.2) { playSound('sand'); PARTICLES.push({x: PLAYER.x+(Math.random()-0.5)*20, y: PLAYER.y+(Math.random()-0.5)*20, size: 3+Math.random()*4, life: 0.5, color: '#d2b48c'}); } STATE.wasInWater = false; }
+                else STATE.wasInWater = false;
+            } else STATE.wasInWater = false;
+
+            PLAYER.x += INPUT.moveVector.x * speed * dt; PLAYER.y += INPUT.moveVector.y * speed * dt;
+
+            const tx = PLAYER.x - (canvas.width/2)/CAMERA.zoom, ty = PLAYER.y - (canvas.height/2)/CAMERA.zoom;
+            const damp = 1 - Math.exp(-CONFIG.cameraDamping * dt); CAMERA.x += (tx - CAMERA.x) * damp; CAMERA.y += (ty - CAMERA.y) * damp;
+
+            if (PLAYER.cooldown > 0) PLAYER.cooldown -= dt;
+            if (INPUT.isFiring && PLAYER.cooldown <= 0) {
+                playSound('shoot'); const a = PLAYER.turretAngle;
+                BULLETS.push({ x: PLAYER.x + Math.cos(a)*35, y: PLAYER.y + Math.sin(a)*35, vx: Math.cos(a)*CONFIG.bulletSpeed, vy: Math.sin(a)*CONFIG.bulletSpeed, life: CONFIG.bulletLife, owner: 'player' });
+                PLAYER.cooldown = getPlayerStat('baseFireRate');
             }
         }
 
-        function update(dt) {
-            if (!STATE.gameStarted || STATE.isPaused || STATE.gameOver) return;
-            if (!PHYSICS_MAP || !worldCanvas) return;
-            if (dt > 0.1) dt = 0.1;
-
-            handleInput(dt);
-            handlePhysics(dt);
-            
-            shopTimer += dt;
-            if (PLAYER.passiveIncome > 0) PLAYER.cash += PLAYER.passiveIncome * dt;
-            if (shopTimer >= 0.2) { shopTimer = 0; updateHUD(); /* checkShops(); */ }
-            enemySpawnTimer += dt;
-            // if (enemySpawnTimer > 5) { enemySpawnTimer = 0; if (ENEMIES.length < 5) spawnEnemy(); }
-            saveTimer += dt;
-            if (saveTimer > 10) { saveTimer = 0; saveGame(); }
-
-            updateEntities(dt);
+        function drawTank(x, y, angle, bodyColor, turretColor, isPlayer, turretAngle) {
+            ctx.save(); ctx.translate(x, y);
+            ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.ellipse(5, 5, 20, 20, 0, 0, Math.PI*2); ctx.fill();
+            ctx.rotate(angle); ctx.fillStyle = '#111'; ctx.fillRect(-22, -22, 44, 6); ctx.fillRect(-22, 16, 44, 6);
+            const bodyGrad = ctx.createLinearGradient(0, -18, 0, 18); bodyGrad.addColorStop(0, bodyColor); bodyGrad.addColorStop(0.5, lighten(bodyColor, 20)); bodyGrad.addColorStop(1, bodyColor);
+            ctx.fillStyle = bodyGrad; ctx.fillRect(-20, -18, 40, 36); ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(-15, -10, 5, 20); ctx.fillRect(10, -10, 5, 20);
+            ctx.restore(); ctx.save(); ctx.translate(x, y); ctx.rotate(isPlayer ? turretAngle : angle);
+            ctx.fillStyle = '#263238'; ctx.fillRect(0, -5, 38, 10);
+            const turretGrad = ctx.createRadialGradient(-5, -5, 2, 0, 0, 15); turretGrad.addColorStop(0, lighten(turretColor, 30)); turretGrad.addColorStop(1, turretColor);
+            ctx.fillStyle = turretGrad; ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle = '#263238'; ctx.lineWidth = 1; ctx.stroke();
+            ctx.restore();
         }
 
         function draw() {
-            if (!worldCanvas) return;
             ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.save(); ctx.scale(CAMERA.zoom, CAMERA.zoom); ctx.translate(-CAMERA.x, -CAMERA.y);
+
+            const cx = Math.floor(PLAYER.x / CHUNK_SIZE), cy = Math.floor(PLAYER.y / CHUNK_SIZE);
+            for(let y=cy-1; y<=cy+1; y++) {
+                for(let x=cx-1; x<=cx+1; x++) {
+                    const chunk = generateChunk(x, y);
+                    ctx.drawImage(chunk.canvas, x * CHUNK_SIZE, y * CHUNK_SIZE);
+                }
+            }
             
-            ctx.save();
-            ctx.scale(CAMERA.zoom, CAMERA.zoom);
-            ctx.translate(-CAMERA.x, -CAMERA.y);
+            // Garbage collect old chunks
+            for (let [k, v] of ACTIVE_CHUNKS.entries()) {
+                const parts = k.split(','); const kx = parseInt(parts[0]), ky = parseInt(parts[1]);
+                if (Math.abs(kx - cx) > 2 || Math.abs(ky - cy) > 2) ACTIVE_CHUNKS.delete(k);
+            }
+
+            for(let s of STRUCTURES) drawStructure(s, ctx);
+            for (let l of FLOOR_LOOT) { ctx.font = "20px Arial"; ctx.fillText("🔩", l.x - 10, l.y + 7); if (l.qty > 1) { ctx.font = "12px monospace"; ctx.fillStyle = "#fff"; ctx.fillText(l.qty + "x", l.x + 5, l.y - 10); } }
+            for (let l of LOOT) { ctx.save(); ctx.translate(l.x, l.y); ctx.shadowBlur = 10; if (l.type === 0) { ctx.fillStyle = '#ff3333'; ctx.shadowColor = '#f00'; ctx.font = "24px Arial"; ctx.fillText("❤", -12, 8); } else if (l.type === 1) { ctx.fillStyle = '#81C784'; ctx.shadowColor = '#0f0'; ctx.fillRect(-24, -12, 48, 24); ctx.fillStyle='#000'; ctx.font="12px monospace"; ctx.fillText("$1", -8, 4); } else if (l.type === 2) { ctx.fillStyle = '#4CAF50'; ctx.shadowColor = '#0f0'; ctx.fillRect(-28, -14, 56, 28); ctx.fillStyle='#000'; ctx.font="12px monospace"; ctx.fillText("$5", -8, 4); } ctx.restore(); }
             
-            ctx.drawImage(worldCanvas, 0, 0);
-
-            /*
-            for (let s of SHOPS) {
-                if (s.unlocked) { ctx.shadowBlur = 15; ctx.shadowColor = s.id === 'med' ? '#f00' : '#0f0'; }
-                ctx.fillStyle = s.color; ctx.fillRect(s.x, s.y, s.w, s.h);
-                ctx.shadowBlur = 0; ctx.fillStyle = '#fff'; ctx.font = "bold 30px Arial"; ctx.textAlign = "center";
-                ctx.fillText(s.icon, s.x + s.w/2, s.y + s.h/2 + 10);
-                if (!s.unlocked) { ctx.font = "bold 14px Arial"; ctx.fillStyle = "#FFD700"; ctx.fillText("$"+s.price, s.x + s.w/2, s.y - 10); }
-            }
-            */
-
-            for (let l of FLOOR_LOOT) {
-                ctx.font = "20px Arial"; ctx.fillText("🔩", l.x - 10, l.y + 7);
-                if (l.qty > 1) { ctx.font = "12px monospace"; ctx.fillStyle = "#fff"; ctx.fillText(l.qty + "x", l.x + 5, l.y - 10); }
-            }
-
-            for (let l of LOOT) {
-                ctx.save(); ctx.translate(l.x, l.y); ctx.shadowBlur = 10;
-                if (l.type === 0) { ctx.fillStyle = '#ff3333'; ctx.shadowColor = '#f00'; ctx.font = "24px Arial"; ctx.fillText("❤", -12, 8); }
-                else if (l.type === 1) { ctx.fillStyle = '#81C784'; ctx.shadowColor = '#0f0'; ctx.fillRect(-24, -12, 48, 24); ctx.fillStyle='#000'; ctx.font="12px monospace"; ctx.fillText("$1", -8, 4); }
-                else if (l.type === 2) { ctx.fillStyle = '#4CAF50'; ctx.shadowColor = '#0f0'; ctx.fillRect(-28, -14, 56, 28); ctx.fillStyle='#000'; ctx.font="12px monospace"; ctx.fillText("$5", -8, 4); }
-                else if (l.type === 3) { ctx.fillStyle = '#FFD700'; ctx.shadowColor = '#ff0'; ctx.beginPath(); ctx.arc(0,0,15,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#000'; ctx.fillText("$", -5, 5);}
-                ctx.restore();
-            }
-
-            ctx.shadowBlur = 0;
-            for (let p of PARTICLES) { ctx.fillStyle = p.color; ctx.globalAlpha = p.life * 2; ctx.fillRect(p.x, p.y, p.size, p.size); ctx.globalAlpha = 1.0; }
-
-            for (let e of ENEMIES) {
-                drawTank(e.x, e.y, e.angle, CONFIG.colors.enemyBody, '#5D4037', false);
-                ctx.fillStyle = '#000'; ctx.fillRect(e.x-15, e.y-40, 30, 4);
-                ctx.fillStyle = '#f00'; ctx.fillRect(e.x-15, e.y-40, 30 * (e.hp/e.maxHp), 4);
-            }
-
-            ctx.lineWidth = 3;
-            for (let b of BULLETS) {
-                ctx.strokeStyle = (b.owner === 'player') ? '#FFEB3B' : '#FF5252';
-                ctx.shadowBlur = 10; ctx.shadowColor = ctx.strokeStyle;
-                ctx.beginPath(); ctx.moveTo(b.x - b.vx*0.02, b.y - b.vy*0.02); ctx.lineTo(b.x, b.y); ctx.stroke();
-            }
-            ctx.shadowBlur = 0;
-
+            ctx.shadowBlur = 0; for (let p of PARTICLES) { ctx.fillStyle = p.color; ctx.globalAlpha = p.life * 2; ctx.fillRect(p.x, p.y, p.size, p.size); ctx.globalAlpha = 1.0; }
+            for (let e of ENEMIES) { drawTank(e.x, e.y, e.angle, CONFIG.colors.enemyBody, '#5D4037', false); ctx.fillStyle = '#000'; ctx.fillRect(e.x-15, e.y-40, 30, 4); ctx.fillStyle = '#f00'; ctx.fillRect(e.x-15, e.y-40, 30 * (e.hp/3), 4); }
+            
+            ctx.lineWidth = 3; for (let b of BULLETS) { ctx.strokeStyle = (b.owner === 'player') ? '#FFEB3B' : '#FF5252'; ctx.shadowBlur = 10; ctx.shadowColor = ctx.strokeStyle; ctx.beginPath(); ctx.moveTo(b.x - b.vx*0.02, b.y - b.vy*0.02); ctx.lineTo(b.x, b.y); ctx.stroke(); } ctx.shadowBlur = 0;
+            
             drawTank(PLAYER.x, PLAYER.y, PLAYER.bodyAngle, CONFIG.colors.tankBody, CONFIG.colors.tankTurret, true, PLAYER.turretAngle);
-            
-            const timeSinceAim = Date.now() - INPUT.lastAimTime;
-            if (timeSinceAim < 3000 && !STATE.placementMode) {
-                ctx.save(); ctx.translate(PLAYER.x, PLAYER.y); ctx.rotate(PLAYER.turretAngle);
-                ctx.strokeStyle = `rgba(255, 255, 255, ${1 - timeSinceAim/3000})`;
-                ctx.setLineDash([5, 5]); ctx.lineWidth = 1;
-                ctx.beginPath(); ctx.moveTo(35, 0); ctx.lineTo(300, 0); ctx.stroke();
-                ctx.restore();
-            }
 
-            if (STATE.placementMode) {
-                ctx.save(); ctx.translate(PLAYER.x, PLAYER.y);
-                ctx.strokeStyle = "rgba(255, 255, 255, 0.8)"; ctx.lineWidth = 2; ctx.setLineDash([10, 10]);
-                ctx.strokeRect(-150, -150, 300, 300);
-                ctx.fillStyle = "rgba(255, 255, 255, 0.1)"; ctx.fillRect(-150, -150, 300, 300);
-                ctx.restore();
-            }
-
+            if (STATE.placementMode) { ctx.save(); ctx.translate(PLAYER.x, PLAYER.y); ctx.strokeStyle = "rgba(255, 255, 255, 0.8)"; ctx.lineWidth = 2; ctx.setLineDash([10, 10]); ctx.strokeRect(-150, -150, 300, 300); ctx.fillStyle = "rgba(255, 255, 255, 0.1)"; ctx.fillRect(-150, -150, 300, 300); ctx.restore(); }
             ctx.restore();
 
-            // Screen space UI
             if (STATE.gameStarted && !STATE.isPaused && !STATE.gameOver && STATE.isMobile) {
-                if (STATE.staticJoysticks) {
-                    drawJoystick({x: canvas.width*0.15, y: canvas.height*0.85}, INPUT.touches.leftId ? INPUT.touches.leftCurr : {x: canvas.width*0.15, y: canvas.height*0.85});
-                    if (!STATE.tapToFire && !STATE.placementMode) drawJoystick({x: canvas.width*0.85, y: canvas.height*0.85}, INPUT.touches.rightId ? INPUT.touches.rightCurr : {x: canvas.width*0.85, y: canvas.height*0.85});
-                } else {
-                    if (INPUT.touches.leftId !== null) drawJoystick(INPUT.touches.leftStart, INPUT.touches.leftCurr);
-                    if (INPUT.touches.rightId !== null && !STATE.tapToFire && !STATE.placementMode) drawJoystick(INPUT.touches.rightStart, INPUT.touches.rightCurr);
-                }
+                const drawJoy = (s, c) => { ctx.beginPath(); ctx.arc(s.x, s.y, 50, 0, Math.PI*2); ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth=2; ctx.stroke(); ctx.beginPath(); ctx.arc(c.x, c.y, 25, 0, Math.PI*2); ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fill(); };
+                if (STATE.staticJoysticks) { drawJoy({x: canvas.width*0.15, y: canvas.height*0.85}, INPUT.touches.leftId ? INPUT.touches.leftCurr : {x: canvas.width*0.15, y: canvas.height*0.85}); if (!STATE.tapToFire && !STATE.placementMode) drawJoy({x: canvas.width*0.85, y: canvas.height*0.85}, INPUT.touches.rightId ? INPUT.touches.rightCurr : {x: canvas.width*0.85, y: canvas.height*0.85}); }
+                else { if (INPUT.touches.leftId !== null) drawJoy(INPUT.touches.leftStart, INPUT.touches.leftCurr); if (INPUT.touches.rightId !== null && !STATE.tapToFire && !STATE.placementMode) drawJoy(INPUT.touches.rightStart, INPUT.touches.rightCurr); }
             }
         }
 
         function gameLoop(timestamp) {
             try {
                 if (!STATE.lastTime) STATE.lastTime = timestamp;
-                const dt = (timestamp - STATE.lastTime) / 1000;
-                STATE.lastTime = timestamp;
-                update(dt);
-                draw();
-                if (STATE.showFPS && dt > 0) {
-                    FPS.buffer.push(1/dt);
-                    if (FPS.buffer.length > 30) FPS.buffer.shift();
-                    if (timestamp - FPS.lastUpdate >= 500) {
-                        const avg = Math.round(FPS.buffer.reduce((a,b)=>a+b,0)/FPS.buffer.length);
-                        const low = Math.round([...FPS.buffer].sort((a,b)=>a-b)[0]);
-                        document.getElementById('fps-counter').innerText = `FPS: ${avg} (Low: ${low})`;
-                        FPS.lastUpdate = timestamp;
-                    }
+                let dt = (timestamp - STATE.lastTime) / 1000; STATE.lastTime = timestamp; if (dt > 0.1) dt = 0.1;
+                
+                if (STATE.gameStarted && !STATE.isPaused && !STATE.gameOver) {
+                    handleInput(); handlePhysics(dt); updateStructures(dt); updateEntities(dt);
+                    if (PLAYER.passiveIncome > 0) PLAYER.inventory.resources.cash += PLAYER.passiveIncome * dt;
+                    enemySpawnTimer += dt; if (enemySpawnTimer > WORLD_CONFIG.enemySpawnRate) { enemySpawnTimer = 0; if (ENEMIES.length < WORLD_CONFIG.maxEnemies) ENEMIES.push({ x: PLAYER.x+(Math.random()-0.5)*1500, y: PLAYER.y+(Math.random()-0.5)*1500, angle: 0, cooldown: rng()*2, hp: 3, radius: 20 }); }
+                    saveTimer += dt; if (saveTimer > 10) { saveTimer = 0; saveGame(); }
                 }
+                
+                draw();
+                
+                if (STATE.showFPS && dt > 0) { FPS.buffer.push(1/dt); if (FPS.buffer.length > 30) FPS.buffer.shift(); if (timestamp - FPS.lastUpdate >= 500) { document.getElementById('fps-counter').innerText = `FPS: ${Math.round(FPS.buffer.reduce((a,b)=>a+b,0)/FPS.buffer.length)}`; FPS.lastUpdate = timestamp; } }
                 requestAnimationFrame(gameLoop);
-            } catch (e) {
-                console.error("LOOP CRASH", e);
-                STATE.gameStarted = false;
-                alert("GAME CRASHED: " + e.message);
-            }
+            } catch(e) { console.error("LOOP CRASH", e); STATE.gameStarted = false; }
         }
 
-        // --- 12. UI LOGIC ---
-        function updateUIState() {
-            const mapAF = ["ANY", "AIMING", "OFF", "NOT AIMING"];
-            const descAF =["Fires on touch.", "Fires when aiming.", "Use fire button.", "Fires when stick touched inside deadzone."];
-            const btnAF = document.getElementById('btn-auto-fire');
-            const txtAF = document.getElementById('autofire-desc');
-            btnAF.innerText = `Auto-Fire: ${mapAF[STATE.autoFireMode]}`;
-            txtAF.innerText = descAF[STATE.autoFireMode];
-            
-            updateToggle('btn-toggle-fps', STATE.showFPS, "Show FPS");
-            updateToggle('btn-static-joy', STATE.staticJoysticks, "Static Joysticks");
-            updateToggle('btn-tap-fire', STATE.tapToFire, "Tap to Fire");
-            updateManualFireButton();
-        }
-        function updateToggle(id, val, text) {
-            const el = document.getElementById(id);
-            el.innerText = `${text}: ${val ? 'ON' : 'OFF'}`;
-            el.classList.toggle('active', val);
-        }
+        // --- 10. UI & BOOTSTRAP ---
+        window.switchTab = function(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+        };
 
         function togglePause(force) {
             STATE.isPaused = force !== undefined ? force : !STATE.isPaused;
-            document.getElementById('pause-modal').style.display = STATE.isPaused ? 'block' : 'none';
+            document.getElementById('pause-modal').style.display = STATE.isPaused ? 'flex' : 'none';
             document.getElementById('pause-overlay').style.display = STATE.isPaused ? 'block' : 'none';
-            if (!STATE.isPaused) {
-                STATE.lastTime = 0; 
-                resetInputs();
-            }
+            if (!STATE.isPaused) { STATE.lastTime = 0; resetInputs(); }
         }
 
-        function setupUI() {
-            const bindBtn = (id, cb) => {
-                const el = document.getElementById(id);
-                if (!el) return;
-                const h = (e) => { e.preventDefault(); e.stopPropagation(); cb(el); return false; };
-                el.addEventListener('touchend', h, {passive:false}); el.addEventListener('click', h);
-            };
-            const bindPress = (id, start, end) => {
-                const el = document.getElementById(id);
-                if (!el) return;
-                const s = (e) => { e.preventDefault(); e.stopPropagation(); start(); };
-                const f = (e) => { e.preventDefault(); e.stopPropagation(); end(); };
-                el.addEventListener('touchstart', s, {passive:false}); el.addEventListener('mousedown', s);
-                el.addEventListener('touchend', f, {passive:false}); el.addEventListener('mouseup', f);
+        function updateUIState() {
+            const btnAF = document.getElementById('btn-auto-fire'), txtAF = document.getElementById('autofire-desc');
+            btnAF.innerText = `Auto-Fire: ${["ANY", "AIMING", "OFF", "NOT AIMING"][STATE.autoFireMode]}`;
+            txtAF.innerText = ["Fires on touch.", "Fires when aiming.", "Use fire button/Spacebar.", "Fires when stick touched inside deadzone."][STATE.autoFireMode];
+            const t = (id,v,l) => { const e=document.getElementById(id); e.innerText=`${l}: ${v?'ON':'OFF'}`; e.classList.toggle('active',v); };
+            t('btn-toggle-fps', STATE.showFPS, "Show FPS"); t('btn-static-joy', STATE.staticJoysticks, "Static Joysticks"); t('btn-tap-fire', STATE.tapToFire, "Tap to Fire");
+            document.getElementById('btn-manual-fire').style.display = (STATE.isMobile && STATE.autoFireMode === 2 && !STATE.tapToFire) ? 'block' : 'none';
+            document.querySelectorAll('.btn-hint').forEach(e => e.style.display = STATE.isMobile ? 'none' : 'block');
+            
+            // Sync sliders
+            document.getElementById('cfg-water').value = WORLD_CONFIG.waterThreshold; document.getElementById('val-water').innerText = WORLD_CONFIG.waterThreshold;
+            document.getElementById('cfg-sand').value = WORLD_CONFIG.sandThreshold; document.getElementById('val-sand').innerText = WORLD_CONFIG.sandThreshold;
+            document.getElementById('cfg-noise').value = WORLD_CONFIG.noiseScale; document.getElementById('val-noise').innerText = WORLD_CONFIG.noiseScale;
+            document.getElementById('cfg-loot').value = WORLD_CONFIG.lootDensity; document.getElementById('val-loot').innerText = WORLD_CONFIG.lootDensity;
+            document.getElementById('cfg-enemies').value = WORLD_CONFIG.maxEnemies; document.getElementById('val-enemies').innerText = WORLD_CONFIG.maxEnemies;
+        }
+
+        function resize() {
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            CAMERA.baseZoom = Math.max(0.5, Math.min(Math.min(window.innerWidth, window.innerHeight) / 900, 1.5));
+            if (!STATE.gameStarted) { CAMERA.zoom = CAMERA.baseZoom; CAMERA.x = PLAYER.x - (canvas.width/2)/CAMERA.zoom; CAMERA.y = PLAYER.y - (canvas.height/2)/CAMERA.zoom; }
+        }
+
+        function doGameOver() { STATE.gameOver = true; saveGame(); document.getElementById('game-over-screen').style.display = 'flex'; }
+
+        window.initGame = function() {
+            log(`Initializing TTR ${VERSION}`); loadSettings(); loadGame(); resize(); window.addEventListener('resize', resize);
+            
+            document.getElementById('boot-splash').style.display = 'none';
+            document.getElementById('start-screen').style.display = 'flex';
+
+            document.getElementById('btn-start').onclick = () => {
+                initAudio(); document.getElementById('start-screen').style.display = 'none'; document.getElementById('ui-layer').style.display = 'block';
+                STATE.gameStarted = true; resetInputs(); updateHUD(); requestAnimationFrame(gameLoop);
             };
 
-            bindBtn('btn-respawn', respawn);
-            bindBtn('btn-zoom', () => { CAMERA.zoom = CAMERA.zoom === 1.0 ? 0.5 : 1.0; });
+            const bindBtn = (id, cb) => { const el = document.getElementById(id); if(!el) return; const h = e=>{e.preventDefault();e.stopPropagation();cb(el);return false;}; el.addEventListener('touchend',h,{passive:false}); el.addEventListener('click',h); };
             
-            bindBtn('pause-btn', () => togglePause(true));
-            bindBtn('btn-close-pause', () => togglePause(false));
-            const overlay = document.getElementById('pause-overlay');
-            const closeBg = (e) => { if (e.target === overlay) { e.preventDefault(); togglePause(false); }};
-            overlay.addEventListener('touchend', closeBg); overlay.addEventListener('click', closeBg);
+            bindBtn('btn-respawn', () => { PLAYER.stats.hp = PLAYER.stats.maxHp; PLAYER.x = PLAYER.respawnX; PLAYER.y = PLAYER.respawnY; STATE.gameOver = false; BULLETS =[]; updateHUD(); document.getElementById('game-over-screen').style.display = 'none'; resetInputs(); CAMERA.x = PLAYER.x - (canvas.width/2)/CAMERA.zoom; CAMERA.y = PLAYER.y - (canvas.height/2)/CAMERA.zoom; saveGame(); });
+            bindBtn('btn-zoom', () => { CAMERA.zoom = CAMERA.zoom === CAMERA.baseZoom ? CAMERA.baseZoom * 0.5 : CAMERA.baseZoom; });
+            bindBtn('pause-btn', () => togglePause(true)); bindBtn('btn-close-pause', () => togglePause(false));
+            document.getElementById('pause-overlay').addEventListener('click', e => togglePause(false));
 
             bindBtn('hud-inventory', () => {
-                if(!STATE.gameStarted) return;
-                PLAYER.inventory.hasNewItem = false; updateHUD();
-                document.getElementById('craft-parts-display').innerText = `Parts: ${PLAYER.inventory.parts} 🔩`;
-                const cBtn = document.getElementById('btn-craft-base');
-                cBtn.disabled = PLAYER.inventory.parts < 10;
+                if(!STATE.gameStarted) return; PLAYER.hasSeenBaseCraft = true; updateHUD();
+                document.getElementById('craft-parts-display').innerText = `Parts: ${PLAYER.inventory.resources.parts} 🔩`;
+                document.getElementById('btn-craft-base').disabled = PLAYER.inventory.resources.parts < 10;
                 document.getElementById('crafting-modal').style.display = 'flex';
             });
             bindBtn('btn-close-crafting', () => document.getElementById('crafting-modal').style.display = 'none');
-            bindBtn('btn-craft-base', () => {
-                if(PLAYER.inventory.parts >= 10) {
-                    document.getElementById('crafting-modal').style.display = 'none';
-                    STATE.placementMode = true;
-                    document.getElementById('placement-ui').style.display = 'flex';
-                }
-            });
-
+            bindBtn('btn-craft-base', () => { if(PLAYER.inventory.resources.parts >= 10) { document.getElementById('crafting-modal').style.display = 'none'; STATE.placementMode = true; document.getElementById('placement-ui').style.display = 'flex'; } });
             bindBtn('btn-cancel-place', () => { STATE.placementMode = false; document.getElementById('placement-ui').style.display = 'none'; });
-            bindBtn('btn-deploy-place', () => {
-                if(PLAYER.inventory.parts >= 10) {
-                    PLAYER.inventory.parts -= 10;
-                    BASES.push({x: PLAYER.x, y: PLAYER.y});
-                    PLAYER.respawnX = PLAYER.x; PLAYER.respawnY = PLAYER.y;
-                    stampBase(PLAYER.x, PLAYER.y, worldCanvas.getContext('2d', { willReadFrequently: true }));
-                    STATE.placementMode = false;
-                    document.getElementById('placement-ui').style.display = 'none';
-                    saveGame(); updateHUD(); showZoneMsg("BASE DEPLOYED");
-                }
-            });
+            bindBtn('btn-deploy-place', () => { if(PLAYER.inventory.resources.parts >= 10) { PLAYER.inventory.resources.parts -= 10; STRUCTURES.push({id:'base_'+Date.now(), type:'base', x:PLAYER.x, y:PLAYER.y, hp:100, maxHp:100, data:{}}); PLAYER.respawnX = PLAYER.x; PLAYER.respawnY = PLAYER.y; STATE.placementMode = false; document.getElementById('placement-ui').style.display = 'none'; saveGame(); updateHUD(); showZoneMsg("BASE DEPLOYED"); } });
 
             bindBtn('btn-toggle-fps', () => { STATE.showFPS = !STATE.showFPS; document.getElementById('top-left-info').style.display = STATE.showFPS ? 'flex' : 'none'; updateUIState(); saveGame(); });
-            bindBtn('btn-static-joy', () => { STATE.staticJoysticks = !STATE.staticJoysticks; if (STATE.tapToFire) STATE.tapToFire = false; updateUIState(); saveGame(); });
-            bindBtn('btn-tap-fire', () => { 
-                STATE.tapToFire = !STATE.tapToFire;
-                if (STATE.tapToFire) { STATE.savedStatic = STATE.staticJoysticks; STATE.savedAutoFire = STATE.autoFireMode; STATE.staticJoysticks = true; STATE.autoFireMode = 2; 
-                } else { STATE.staticJoysticks = STATE.savedStatic; STATE.autoFireMode = STATE.savedAutoFire; }
-                updateUIState(); saveGame(); 
+            bindBtn('btn-static-joy', () => { STATE.staticJoysticks = !STATE.staticJoysticks; if(STATE.tapToFire) STATE.tapToFire = false; updateUIState(); saveGame(); });
+            bindBtn('btn-tap-fire', () => { STATE.tapToFire = !STATE.tapToFire; if (STATE.tapToFire) { STATE.savedStatic = STATE.staticJoysticks; STATE.savedAutoFire = STATE.autoFireMode; STATE.staticJoysticks = true; STATE.autoFireMode = 2; } else { STATE.staticJoysticks = STATE.savedStatic; STATE.autoFireMode = STATE.savedAutoFire; } updateUIState(); saveGame(); });
+            bindBtn('btn-auto-fire', () => { STATE.autoFireMode = (STATE.autoFireMode + 1) % 4; if(STATE.tapToFire) STATE.tapToFire = false; updateUIState(); saveGame(); });
+            
+            // Slider Listeners
+            ['water','sand','noise','loot','enemies'].forEach(k => { document.getElementById('cfg-'+k).addEventListener('input', e => { document.getElementById('val-'+k).innerText = e.target.value; }); });
+            
+            bindBtn('btn-regen-world', () => {
+                WORLD_CONFIG.waterThreshold = parseFloat(document.getElementById('cfg-water').value);
+                WORLD_CONFIG.sandThreshold = parseFloat(document.getElementById('cfg-sand').value);
+                WORLD_CONFIG.noiseScale = parseFloat(document.getElementById('cfg-noise').value);
+                WORLD_CONFIG.lootDensity = parseInt(document.getElementById('cfg-loot').value);
+                WORLD_CONFIG.maxEnemies = parseInt(document.getElementById('cfg-enemies').value);
+                ACTIVE_CHUNKS.clear(); STRUCTURES = []; ENEMIES = []; PLAYER.x=1600; PLAYER.y=1600; PLAYER.respawnX=1600; PLAYER.respawnY=1600;
+                seedWorldLoot(); saveGame(); togglePause(false); showZoneMsg("WORLD REGENERATED");
             });
-            bindBtn('btn-auto-fire', () => { STATE.autoFireMode = (STATE.autoFireMode + 1) % 4; if (STATE.tapToFire) STATE.tapToFire = false; updateUIState(); saveGame(); });
-            bindBtn('btn-toggle-debug', (el) => { STATE.showDebug = !STATE.showDebug; document.getElementById('debug-overlay').style.display = STATE.showDebug ? 'block' : 'none'; document.getElementById('btn-copy-log').style.display = STATE.showDebug ? 'block' : 'none'; el.classList.toggle('active'); });
-            bindBtn('btn-copy-log', () => { const text = DEBUG_LOG.join('\n'); if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => alert("Copied")).catch(e => fallbackCopy(text)); else fallbackCopy(text); });
-            bindBtn('btn-start-over', startOver);
-            bindBtn('btn-clear-settings', clearSettings);
-            bindPress('btn-manual-fire', () => STATE.manualFirePressed = true, () => STATE.manualFirePressed = false);
-        }
 
-        function fallbackCopy(text) {
-            const textArea = document.createElement("textarea"); textArea.value = text; textArea.style.position = "fixed"; textArea.style.opacity = "0";
-            document.body.appendChild(textArea); textArea.focus(); textArea.select();
-            try { textArea.setSelectionRange(0, 99999); document.execCommand('copy'); alert("Copied to clipboard"); } catch (err) { alert("Copy failed."); }
-            document.body.removeChild(textArea);
-        }
-
-        // --- 13. WORLD GEN ---
-        function stampBase(bx, by, wCtx) {
-            const startX = Math.max(0, Math.min(CONFIG.worldSize - 300, Math.floor(bx - 150)));
-            const startY = Math.max(0, Math.min(CONFIG.worldSize - 300, Math.floor(by - 150)));
+            bindBtn('btn-start-over', () => { if(confirm("Hard Wipe Save Data?")) { localStorage.removeItem(SAVE_KEY); location.reload(); } });
+            bindBtn('btn-clear-settings', () => { if(confirm("Reset settings?")) { localStorage.removeItem(SETTINGS_KEY); location.reload(); } });
             
-            wCtx.fillStyle = '#555'; wCtx.fillRect(startX, startY, 300, 300);
-            
-            for(let y = startY; y < startY + 300; y++) {
-                for(let x = startX; x < startX + 300; x++) PHYSICS_MAP[y * CONFIG.worldSize + x] = 2; // Concrete
-            }
-            
-            const baseImg = wCtx.getImageData(startX, startY, 300, 300);
-            for(let i=0; i<baseImg.data.length; i+=4) {
-                const n = rng() * 20;
-                baseImg.data[i] = 80 + n; baseImg.data[i+1] = 80 + n; baseImg.data[i+2] = 80 + n; baseImg.data[i+3] = 255;
-            }
-            wCtx.putImageData(baseImg, startX, startY);
-        }
-
-        function startGeneration() {
-            const size = CONFIG.worldSize;
-            const TEMP_MAP = new Uint8Array(size * size);
-            worldCanvas = document.createElement('canvas');
-            worldCanvas.width = size; worldCanvas.height = size;
-            const wCtx = worldCanvas.getContext('2d', { willReadFrequently: true });
-
-            wCtx.fillStyle = CONFIG.colors.land; wCtx.fillRect(0, 0, size, size);
-            const noiseScale = 0.003;
-            
-            function processNoise(y) {
-                try {
-                    const chunkSize = 800;
-                    for (let row = 0; row < chunkSize; row++) {
-                        if (y + row >= size) break;
-                        const cy = y + row;
-                        for (let cx = 0; cx < size; cx++) {
-                            const pIdx = cy * size + cx;
-                            let n = Noise.perlin2(cx * noiseScale, cy * noiseScale);
-                            n += 0.5 * Noise.perlin2(cx * noiseScale * 3, cy * noiseScale * 3);
-                            if (n < -0.25) TEMP_MAP[pIdx] = 1;
-                            else if (n < -0.15) TEMP_MAP[pIdx] = 3;
-                            else TEMP_MAP[pIdx] = 0;
-                        }
-                    }
-                    y += chunkSize;
-                    document.getElementById('loading-bar-fill').style.width = Math.min(100, Math.round((y / size) * 40)) + "%";
-                    if (y < size) requestAnimationFrame(() => processNoise(y));
-                    else { PHYSICS_MAP = TEMP_MAP; processDespeckle(0, wCtx); }
-                } catch(e) { console.error("Noise Gen Error", e); }
-            }
-            processNoise(0);
-        }
-
-        function processDespeckle(y, wCtx) {
-            try {
-                const size = CONFIG.worldSize; const chunkSize = 800;
-                for (let row = 0; row < chunkSize; row++) {
-                    if (y + row >= size - 1) break;
-                    const cy = y + row;
-                    if (cy === 0) continue;
-                    for (let cx = 1; cx < size - 1; cx++) {
-                        const idx = cy * size + cx; const type = PHYSICS_MAP[idx];
-                        if (type === 1 || type === 3) {
-                            let neighbors = 0;
-                            for (let dy = -1; dy <= 1; dy++) {
-                                for (let dx = -1; dx <= 1; dx++) { if (PHYSICS_MAP[(cy+dy)*size + (cx+dx)] === type) neighbors++; }
-                            }
-                            if (neighbors < 5) PHYSICS_MAP[idx] = 0;
-                        }
-                    }
-                }
-                y += chunkSize;
-                document.getElementById('loading-bar-fill').style.width = (40 + Math.min(100, Math.round((y / size) * 30))) + "%";
-                document.getElementById('loading-text').innerText = "Smoothing Terrain...";
-                if (y < size) requestAnimationFrame(() => processDespeckle(y, wCtx));
-                else processRender(0, wCtx);
-            } catch(e) { console.error("Despeckle Error", e); }
-        }
-
-        function processRender(y, wCtx) {
-            try {
-                const size = CONFIG.worldSize; const chunkSize = 800;
-                const imgData = wCtx.getImageData(0, y, size, Math.min(chunkSize, size - y));
-                const data = imgData.data;
-
-                for (let row = 0; row < chunkSize; row++) {
-                    if (y + row >= size) break;
-                    const cy = y + row;
-                    for (let cx = 0; cx < size; cx++) {
-                        const idx = (row * size + cx) * 4; const pIdx = cy * size + cx; const type = PHYSICS_MAP[pIdx];
-                        if (type === 1) { data[idx]=26; data[idx+1]=38; data[idx+2]=47; data[idx+3]=255; }
-                        else if (type === 3) { const grit = (rng() - 0.5) * 20; data[idx]=210+grit; data[idx+1]=180+grit; data[idx+2]=140+grit; data[idx+3]=255; } 
-                        else { const grit = (rng() - 0.5) * 20; data[idx]=75+grit; data[idx+1]=83+grit; data[idx+2]=32+grit; data[idx+3]=255; }
-                    }
-                }
-                wCtx.putImageData(imgData, 0, y); y += chunkSize;
-                document.getElementById('loading-bar-fill').style.width = (70 + Math.min(100, Math.round((y / size) * 30))) + "%";
-                document.getElementById('loading-text').innerText = "Rendering World...";
-                if (y < size) requestAnimationFrame(() => processRender(y, wCtx));
-                else finishGeneration(wCtx);
-            } catch(e) { console.error("Render Error", e); }
-        }
-
-        function finishGeneration(wCtx) {
-            // Seed Floor Loot if new game
-            if (!STATE.hasSavedData) {
-                let attempts = 0;
-                while(FLOOR_LOOT.length < 150 && attempts < 2000) {
-                    attempts++;
-                    let lx = rng() * CONFIG.worldSize; let ly = rng() * CONFIG.worldSize;
-                    let idx = Math.floor(ly) * CONFIG.worldSize + Math.floor(lx);
-                    if (PHYSICS_MAP[idx] !== 1) { // Not deep water
-                        let r = rng(); let qty = r < 0.8 ? 1 : r < 0.98 ? 3 : 10;
-                        FLOOR_LOOT.push({ x: lx, y: ly, qty: qty });
-                    }
-                }
-            }
-
-            // Stamp any saved bases
-            for (let b of BASES) stampBase(b.x, b.y, wCtx);
-
-            console.log("Generation Complete");
-            STATE.worldReady = true;
-            if (STATE.startOnLoad) startGame();
-            else {
-                document.getElementById('loading-bar-container').style.display = 'none';
-                document.getElementById('loading-text').style.visibility = 'hidden';
-                document.getElementById('btn-start').style.display = 'block';
-            }
-        }
-
-        // --- 14. INIT ---
-        window.startGame = function() {
-            document.getElementById('start-screen').style.display = 'none';
-            document.getElementById('ui-layer').style.display = 'block';
-            STATE.gameStarted = true;
-            resetInputs();
-            updateHUD();
-            requestAnimationFrame(gameLoop);
+            setupInputs(); updateUIState();
         };
 
-        window.initGame = function() {
-            log(`Initializing TTR ${VERSION}`);
-            loadGame();
-            resize();
-            window.addEventListener('resize', resize);
-            
-            document.getElementById('loading-bar-container').style.display = 'block';
-            startGeneration();
-
-            document.getElementById('btn-start').onclick = () => {
-                initAudio();
-                if (STATE.worldReady) startGame();
-                else {
-                    STATE.startOnLoad = true;
-                    document.getElementById('btn-start').style.display = 'none';
-                    document.getElementById('loading-bar-container').style.display = 'block';
-                    document.getElementById('loading-text').style.visibility = 'visible';
-                }
-            };
-
-            setupInputs();
-            setupUI();
-            updateUIState();
-
-            window.addEventListener('blur', () => {
-                if (typeof togglePause === 'function' && STATE.gameStarted && !STATE.isPaused && !STATE.gameOver) { togglePause(true); resetInputs(); saveGame(); }
-            });
-        };
-
-        // --- 15. BOOTSTRAP ---
-        window.addEventListener('load', function() {
-            try { if (window.initGame) window.initGame(); else throw new Error("initGame not found"); } 
-            catch (e) { console.error("BOOTSTRAP ERROR", e); }
-        });
-
+        window.addEventListener('load', () => { setTimeout(() => { if (window.initGame) window.initGame(); }, 100); });
     </script>
 </body>
 </html>
