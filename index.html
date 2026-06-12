@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TTR v27</title>
+    <title>TTR v28</title>
     <link rel="icon" href="data:,">
     <style>
         /* CORE STYLES */
@@ -61,9 +61,22 @@
             color: #fff; text-shadow: 1px 1px 2px #000;
         }
 
-        #hud-cash {
+        /* INVENTORY (Replaces Cash) */
+        #hud-inventory {
             position: absolute; top: 50px; right: 60px;
-            font-size: 20px; color: #81C784; text-align: right; font-family: monospace;
+            background: rgba(0,0,0,0.7); padding: 8px 12px;
+            border: 1px solid #555; border-radius: 4px;
+            font-family: monospace; font-size: 18px; color: #fff;
+            pointer-events: auto; cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+        #hud-inventory:active { transform: scale(0.98); }
+        #inv-cash { color: #81C784; }
+        #inv-parts { color: #ccc; margin-left: 10px; }
+        #inv-badge {
+            display: none; position: absolute; top: -5px; right: -5px;
+            width: 14px; height: 14px; background: #ff3333;
+            border-radius: 50%; border: 2px solid #111;
         }
 
         #hud-zone-msg {
@@ -79,6 +92,17 @@
             background: rgba(0,0,0,0.5); border: 1px solid #666; border-radius: 4px;
             pointer-events: auto;
         }
+
+        /* ZOOM BUTTON */
+        #btn-zoom {
+            position: absolute; bottom: 20px; left: 20px;
+            width: 50px; height: 50px; border-radius: 50%;
+            background: rgba(0,0,0,0.6); border: 2px solid #666;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 24px; pointer-events: auto; cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        #btn-zoom:active { transform: scale(0.9); }
 
         /* MANUAL FIRE BUTTON */
         #btn-manual-fire {
@@ -96,7 +120,7 @@
         /* MODALS */
         .fullscreen-modal {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: #111;
+            background: rgba(17,17,17,0.95);
             display: flex; flex-direction: column; justify-content: center; align-items: center;
             z-index: 50; pointer-events: auto;
         }
@@ -112,12 +136,20 @@
             text-transform: uppercase; letter-spacing: 1px;
         }
         .big-btn:active { background: #444; transform: translateY(2px); }
+        .big-btn:disabled { opacity: 0.5; pointer-events: none; }
 
         #loading-bar-container {
             width: 60%; height: 10px; background: #222; border: 1px solid #444; margin-top: 20px; display: none;
         }
         #loading-bar-fill { width: 0%; height: 100%; background: #4CAF50; transition: width 0.1s; }
         #loading-text { color: #666; font-size: 12px; margin-top: 5px; min-height: 15px; visibility: hidden;}
+
+        /* PLACEMENT UI */
+        #placement-ui {
+            display: none; position: absolute; bottom: 10%; width: 100%;
+            justify-content: center; gap: 20px; z-index: 15; pointer-events: none;
+        }
+        #placement-ui button { pointer-events: auto; font-size: 16px; padding: 15px 30px; }
 
         /* PAUSE MENU */
         #pause-modal {
@@ -153,10 +185,8 @@
 
         /* CRASH SCREEN (RSOD) */
         #crash-screen {
-            display: none; /* Flex when active */
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #500; z-index: 10000;
-            flex-direction: column; justify-content: center; align-items: center;
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #500; z-index: 10000; flex-direction: column; justify-content: center; align-items: center;
             padding: 20px; box-sizing: border-box;
         }
         #crash-log {
@@ -164,9 +194,7 @@
             border: 1px solid #f88; font-family: monospace; padding: 10px;
             margin-bottom: 20px; font-size: 10px;
         }
-        #btn-copy-crash {
-            padding: 15px 30px; background: #fff; color: #900; border: none; font-weight: bold; cursor: pointer;
-        }
+        #btn-copy-crash { padding: 15px 30px; background: #fff; color: #900; border: none; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -195,19 +223,41 @@
         <button id="btn-respawn" class="big-btn" style="background: #500; border-color: #f00;">REDEPLOY</button>
     </div>
 
+    <!-- CRAFTING MENU -->
+    <div id="crafting-modal" class="fullscreen-modal" style="display:none;">
+        <h1>CRAFTING</h1>
+        <p id="craft-parts-display" style="font-size:24px; color:#fff; font-family:monospace; margin-bottom:40px;">Parts: 0 🔩</p>
+        <button id="btn-craft-base" class="big-btn" style="border-color:#4CAF50;">CRAFT BASE HUB (10 🔩)</button>
+        <button id="btn-close-crafting" class="big-btn" style="margin-top:20px; background:#500; border-color:#f00;">CLOSE</button>
+    </div>
+
     <div id="ui-layer">
         <div id="top-left-info">
-            <span id="version-display">v27</span>
+            <span id="version-display">v28</span>
             <span id="fps-counter">FPS: --</span>
         </div>
+        
         <div id="hud-hp-container">
             <div id="hud-hp-fill"></div>
             <div id="hud-hp-text">5/5</div>
         </div>
-        <div id="hud-cash">$0</div>
+
+        <div id="hud-inventory">
+            <span id="inv-cash">$0</span><span id="inv-parts">0 🔩</span>
+            <div id="inv-badge"></div>
+        </div>
+
         <div id="hud-zone-msg"></div>
         <div id="pause-btn">&#10074;&#10074;</div>
+        
+        <div id="btn-zoom">🔍</div>
         <div id="btn-manual-fire"></div>
+
+        <div id="placement-ui">
+            <button id="btn-cancel-place" class="big-btn" style="background:linear-gradient(180deg, #800, #500); border-color:#f00;">❌ CANCEL</button>
+            <button id="btn-deploy-place" class="big-btn" style="background:linear-gradient(180deg, #080, #050); border-color:#0f0;">✅ DEPLOY</button>
+        </div>
+
         <div id="pause-overlay"></div>
         <div id="pause-modal">
             <h3 style="color:#ccc; margin-top:0;">SYSTEM PAUSED</h3>
@@ -230,8 +280,9 @@
 
     <script>
         /** 
-         * TTR ENGINE v27
+         * TTR ENGINE v28
          * Fixes: Android generation load times, left joystick infinite movement bug, temporarily disabled enemies and shops.
+         * New: Zoom toggle, seeded Parts (🔩) floor loot, persistent inventory, Base Hub crafting & placement.
          */
 
         // --- 1. CONSOLE BRIDGE & CRASH UI ---
@@ -291,7 +342,7 @@
         });
 
         // --- 2. CONFIG & STATE ---
-        const VERSION = "v27";
+        const VERSION = "v28";
         const SETTINGS_KEY = "TTR_SETTINGS";
         const SAVE_KEY = "TTR_SAVE_DATA";
         const CONFIG = {
@@ -307,7 +358,7 @@
             worldReady: false, startOnLoad: false, gameStarted: false, gameOver: false, lastTime: 0, 
             showFPS: true, showDebug: false, autoFireMode: 0, staticJoysticks: false, tapToFire: false,
             savedAutoFire: 0, savedStatic: false, isMobile: false, isPaused: false, audioInitialized: false,
-            wasInWater: false, manualFirePressed: false
+            wasInWater: false, manualFirePressed: false, hasSavedData: false, placementMode: false
         };
 
         // --- 3. LIBRARIES ---
@@ -322,7 +373,7 @@
         })();
 
         // --- 4. UTILS & GLOBALS ---
-        const CAMERA = { x: 0, y: 0 };
+        const CAMERA = { x: 0, y: 0, zoom: 1.0 };
         const FPS = { buffer:[], lastUpdate: 0, display: "FPS: --" };
         let PHYSICS_MAP = null; 
         let SEED = 1;
@@ -331,8 +382,11 @@
             { id: 'cash', type: 'cash', x: 1650, y: 1550, w: 60, h: 60, tier: 0, unlocked: false, color: '#444', icon: '$' }
         ];
         let shopTimer = 0, enemySpawnTimer = 0, saveTimer = 0;
-        let PLAYER = { x: 1600, y: 1600, radius: 20, cooldown: 0, bodyAngle: 0, turretAngle: 0, hp: 5, maxHp: 5, cash: 0, passiveIncome: 0 };
-        let BULLETS =[], PARTICLES =[], ENEMIES = [], LOOT =[];
+        let PLAYER = { 
+            x: 1600, y: 1600, radius: 20, cooldown: 0, bodyAngle: 0, turretAngle: 0, hp: 5, maxHp: 5, cash: 0, passiveIncome: 0,
+            inventory: { parts: 0, hasNewItem: false }, respawnX: 1600, respawnY: 1600
+        };
+        let BULLETS =[], PARTICLES =[], ENEMIES = [], LOOT =[], FLOOR_LOOT = [], BASES = [];
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d', { alpha: false });
         let worldCanvas = null;
@@ -351,7 +405,10 @@
         function resize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            if (!STATE.gameStarted) { CAMERA.x = PLAYER.x - canvas.width/2; CAMERA.y = PLAYER.y - canvas.height/2; }
+            if (!STATE.gameStarted) { 
+                CAMERA.x = PLAYER.x - (canvas.width/2)/CAMERA.zoom; 
+                CAMERA.y = PLAYER.y - (canvas.height/2)/CAMERA.zoom; 
+            }
         }
         function resetInputs() {
             INPUT.keys = {}; INPUT.mouse.down = false; 
@@ -438,7 +495,16 @@
                 const save = localStorage.getItem(SAVE_KEY);
                 if (save) {
                     const d = JSON.parse(save);
-                    SEED = d.seed; PLAYER = d.player; ENEMIES = d.enemies; LOOT = d.loot; SHOPS = d.shops;
+                    SEED = d.seed; 
+                    PLAYER = { ...PLAYER, ...d.player };
+                    if (!PLAYER.inventory) PLAYER.inventory = { parts: 0, hasNewItem: false };
+                    if (PLAYER.respawnX === undefined) { PLAYER.respawnX = 1600; PLAYER.respawnY = 1600; }
+                    ENEMIES = d.enemies || []; 
+                    LOOT = d.loot || []; 
+                    SHOPS = d.shops || SHOPS;
+                    FLOOR_LOOT = d.floorLoot || [];
+                    BASES = d.bases || [];
+                    STATE.hasSavedData = true;
                     console.log("Game Loaded. Seed: " + SEED);
                 } else {
                     SEED = Math.floor(Math.random() * 1000000);
@@ -448,7 +514,7 @@
             } catch (e) { console.error(e); SEED = Math.floor(Math.random() * 1000000); rng = mulberry32(SEED); }
         }
         function saveGame() {
-            const data = { seed: SEED, player: PLAYER, enemies: ENEMIES, loot: LOOT, shops: SHOPS };
+            const data = { seed: SEED, player: PLAYER, enemies: ENEMIES, loot: LOOT, shops: SHOPS, floorLoot: FLOOR_LOOT, bases: BASES };
             localStorage.setItem(SAVE_KEY, JSON.stringify(data));
             const settings = { showFPS: STATE.showFPS, autoFireMode: STATE.autoFireMode, staticJoysticks: STATE.staticJoysticks, tapToFire: STATE.tapToFire };
             localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -499,7 +565,9 @@
             const pct = (PLAYER.hp / PLAYER.maxHp) * 100;
             document.getElementById('hud-hp-fill').style.width = `${pct}%`;
             document.getElementById('hud-hp-text').innerText = `${PLAYER.hp.toFixed(1)}/${PLAYER.maxHp}`;
-            document.getElementById('hud-cash').innerText = formatMoney(PLAYER.cash);
+            document.getElementById('inv-cash').innerText = formatMoney(PLAYER.cash);
+            document.getElementById('inv-parts').innerText = `${PLAYER.inventory.parts} 🔩`;
+            document.getElementById('inv-badge').style.display = PLAYER.inventory.hasNewItem ? 'block' : 'none';
         }
         function showZoneMsg(msg) {
             const el = document.getElementById('hud-zone-msg'); el.innerText = msg; el.style.opacity = 1;
@@ -517,9 +585,9 @@
             document.getElementById('game-over-screen').style.display = 'flex';
         }
         function respawn() {
-            PLAYER.hp = PLAYER.maxHp; PLAYER.x = 1600; PLAYER.y = 1600; STATE.gameOver = false; BULLETS =[]; updateHUD();
+            PLAYER.hp = PLAYER.maxHp; PLAYER.x = PLAYER.respawnX; PLAYER.y = PLAYER.respawnY; STATE.gameOver = false; BULLETS =[]; updateHUD();
             document.getElementById('game-over-screen').style.display = 'none';
-            resetInputs(); CAMERA.x = PLAYER.x - canvas.width/2; CAMERA.y = PLAYER.y - canvas.height/2;
+            resetInputs(); CAMERA.x = PLAYER.x - (canvas.width/2)/CAMERA.zoom; CAMERA.y = PLAYER.y - (canvas.height/2)/CAMERA.zoom;
             saveGame();
         }
 
@@ -634,11 +702,13 @@
                     const dist = Math.sqrt(dx*dx + dy*dy);
                     const isMoved = (dist / 50) > CONFIG.joystickDeadzone;
                     if (isMoved) { INPUT.aimAngle = Math.atan2(dy, dx); INPUT.lastAimTime = Date.now(); }
-                    if (STATE.autoFireMode === 0) INPUT.isFiring = true;
-                    else if (STATE.autoFireMode === 1) INPUT.isFiring = isMoved;
-                    else if (STATE.autoFireMode === 3) INPUT.isFiring = !isMoved;
-                    else INPUT.isFiring = STATE.manualFirePressed;
-                } else if (!STATE.tapToFire) { INPUT.isFiring = STATE.manualFirePressed; }
+                    if (!STATE.placementMode) {
+                        if (STATE.autoFireMode === 0) INPUT.isFiring = true;
+                        else if (STATE.autoFireMode === 1) INPUT.isFiring = isMoved;
+                        else if (STATE.autoFireMode === 3) INPUT.isFiring = !isMoved;
+                        else INPUT.isFiring = STATE.manualFirePressed;
+                    }
+                } else if (!STATE.tapToFire && !STATE.placementMode) { INPUT.isFiring = STATE.manualFirePressed; }
             } else {
                 INPUT.moveVector = {x:0, y:0};
                 if (INPUT.keys['w'] || INPUT.keys['arrowup']) INPUT.moveVector.y = -1;
@@ -649,8 +719,8 @@
                     const len = Math.sqrt(INPUT.moveVector.x**2 + INPUT.moveVector.y**2);
                     INPUT.moveVector.x /= len; INPUT.moveVector.y /= len;
                 }
-                INPUT.aimAngle = Math.atan2((INPUT.mouse.y + CAMERA.y) - PLAYER.y, (INPUT.mouse.x + CAMERA.x) - PLAYER.x);
-                INPUT.isFiring = INPUT.mouse.down;
+                INPUT.aimAngle = Math.atan2((INPUT.mouse.y / CAMERA.zoom + CAMERA.y) - PLAYER.y, (INPUT.mouse.x / CAMERA.zoom + CAMERA.x) - PLAYER.x);
+                INPUT.isFiring = !STATE.placementMode && INPUT.mouse.down;
             }
             if (INPUT.moveVector.x !== 0 || INPUT.moveVector.y !== 0) PLAYER.bodyAngle = Math.atan2(INPUT.moveVector.y, INPUT.moveVector.x);
             PLAYER.turretAngle = INPUT.aimAngle;
@@ -681,8 +751,8 @@
             PLAYER.x = Math.max(20, Math.min(CONFIG.worldSize-20, PLAYER.x));
             PLAYER.y = Math.max(20, Math.min(CONFIG.worldSize-20, PLAYER.y));
 
-            const tx = PLAYER.x - canvas.width/2;
-            const ty = PLAYER.y - canvas.height/2;
+            const tx = PLAYER.x - (canvas.width/2)/CAMERA.zoom;
+            const ty = PLAYER.y - (canvas.height/2)/CAMERA.zoom;
             const damp = 1 - Math.exp(-CONFIG.cameraDamping * dt);
             CAMERA.x += (tx - CAMERA.x) * damp;
             CAMERA.y += (ty - CAMERA.y) * damp;
@@ -775,7 +845,7 @@
                 }
             }
 
-            // Loot
+            // Cash Loot
             for (let i = LOOT.length - 1; i >= 0; i--) {
                 let l = LOOT[i];
                 if (Math.hypot(PLAYER.x - l.x, PLAYER.y - l.y) < PLAYER.radius + 20) {
@@ -785,6 +855,18 @@
                     else if (l.type === 2) PLAYER.cash += 5;
                     else if (l.type === 3) PLAYER.cash += l.value;
                     LOOT.splice(i, 1);
+                    updateHUD();
+                }
+            }
+
+            // Floor Loot (Parts)
+            for (let i = FLOOR_LOOT.length - 1; i >= 0; i--) {
+                let l = FLOOR_LOOT[i];
+                if (Math.hypot(PLAYER.x - l.x, PLAYER.y - l.y) < PLAYER.radius + 15) {
+                    playSound('pickup');
+                    PLAYER.inventory.parts += l.qty;
+                    if (!PLAYER.inventory.hasNewItem) PLAYER.inventory.hasNewItem = true;
+                    FLOOR_LOOT.splice(i, 1);
                     updateHUD();
                 }
             }
@@ -818,8 +900,11 @@
         function draw() {
             if (!worldCanvas) return;
             ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
             ctx.save();
+            ctx.scale(CAMERA.zoom, CAMERA.zoom);
             ctx.translate(-CAMERA.x, -CAMERA.y);
+            
             ctx.drawImage(worldCanvas, 0, 0);
 
             /*
@@ -831,6 +916,11 @@
                 if (!s.unlocked) { ctx.font = "bold 14px Arial"; ctx.fillStyle = "#FFD700"; ctx.fillText("$"+s.price, s.x + s.w/2, s.y - 10); }
             }
             */
+
+            for (let l of FLOOR_LOOT) {
+                ctx.font = "20px Arial"; ctx.fillText("🔩", l.x - 10, l.y + 7);
+                if (l.qty > 1) { ctx.font = "12px monospace"; ctx.fillStyle = "#fff"; ctx.fillText(l.qty + "x", l.x + 5, l.y - 10); }
+            }
 
             for (let l of LOOT) {
                 ctx.save(); ctx.translate(l.x, l.y); ctx.shadowBlur = 10;
@@ -861,7 +951,7 @@
             drawTank(PLAYER.x, PLAYER.y, PLAYER.bodyAngle, CONFIG.colors.tankBody, CONFIG.colors.tankTurret, true, PLAYER.turretAngle);
             
             const timeSinceAim = Date.now() - INPUT.lastAimTime;
-            if (timeSinceAim < 3000) {
+            if (timeSinceAim < 3000 && !STATE.placementMode) {
                 ctx.save(); ctx.translate(PLAYER.x, PLAYER.y); ctx.rotate(PLAYER.turretAngle);
                 ctx.strokeStyle = `rgba(255, 255, 255, ${1 - timeSinceAim/3000})`;
                 ctx.setLineDash([5, 5]); ctx.lineWidth = 1;
@@ -869,15 +959,24 @@
                 ctx.restore();
             }
 
+            if (STATE.placementMode) {
+                ctx.save(); ctx.translate(PLAYER.x, PLAYER.y);
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.8)"; ctx.lineWidth = 2; ctx.setLineDash([10, 10]);
+                ctx.strokeRect(-150, -150, 300, 300);
+                ctx.fillStyle = "rgba(255, 255, 255, 0.1)"; ctx.fillRect(-150, -150, 300, 300);
+                ctx.restore();
+            }
+
             ctx.restore();
 
+            // Screen space UI
             if (STATE.gameStarted && !STATE.isPaused && !STATE.gameOver && STATE.isMobile) {
                 if (STATE.staticJoysticks) {
                     drawJoystick({x: canvas.width*0.15, y: canvas.height*0.85}, INPUT.touches.leftId ? INPUT.touches.leftCurr : {x: canvas.width*0.15, y: canvas.height*0.85});
-                    if (!STATE.tapToFire) drawJoystick({x: canvas.width*0.85, y: canvas.height*0.85}, INPUT.touches.rightId ? INPUT.touches.rightCurr : {x: canvas.width*0.85, y: canvas.height*0.85});
+                    if (!STATE.tapToFire && !STATE.placementMode) drawJoystick({x: canvas.width*0.85, y: canvas.height*0.85}, INPUT.touches.rightId ? INPUT.touches.rightCurr : {x: canvas.width*0.85, y: canvas.height*0.85});
                 } else {
                     if (INPUT.touches.leftId !== null) drawJoystick(INPUT.touches.leftStart, INPUT.touches.leftCurr);
-                    if (INPUT.touches.rightId !== null && !STATE.tapToFire) drawJoystick(INPUT.touches.rightStart, INPUT.touches.rightCurr);
+                    if (INPUT.touches.rightId !== null && !STATE.tapToFire && !STATE.placementMode) drawJoystick(INPUT.touches.rightStart, INPUT.touches.rightCurr);
                 }
             }
         }
@@ -932,7 +1031,7 @@
             document.getElementById('pause-modal').style.display = STATE.isPaused ? 'block' : 'none';
             document.getElementById('pause-overlay').style.display = STATE.isPaused ? 'block' : 'none';
             if (!STATE.isPaused) {
-                STATE.lastTime = 0; // Reset lastTime to prevent huge dt jump
+                STATE.lastTime = 0; 
                 resetInputs();
             }
         }
@@ -954,6 +1053,7 @@
             };
 
             bindBtn('btn-respawn', respawn);
+            bindBtn('btn-zoom', () => { CAMERA.zoom = CAMERA.zoom === 1.0 ? 0.5 : 1.0; });
             
             bindBtn('pause-btn', () => togglePause(true));
             bindBtn('btn-close-pause', () => togglePause(false));
@@ -961,82 +1061,86 @@
             const closeBg = (e) => { if (e.target === overlay) { e.preventDefault(); togglePause(false); }};
             overlay.addEventListener('touchend', closeBg); overlay.addEventListener('click', closeBg);
 
-            bindBtn('btn-toggle-fps', () => { STATE.showFPS = !STATE.showFPS; document.getElementById('top-left-info').style.display = STATE.showFPS ? 'flex' : 'none'; updateUIState(); saveGame(); });
-            
-            bindBtn('btn-static-joy', () => { 
-                STATE.staticJoysticks = !STATE.staticJoysticks; 
-                if (STATE.tapToFire) STATE.tapToFire = false; 
-                updateUIState(); saveGame(); 
+            bindBtn('hud-inventory', () => {
+                if(!STATE.gameStarted) return;
+                PLAYER.inventory.hasNewItem = false; updateHUD();
+                document.getElementById('craft-parts-display').innerText = `Parts: ${PLAYER.inventory.parts} 🔩`;
+                const cBtn = document.getElementById('btn-craft-base');
+                cBtn.disabled = PLAYER.inventory.parts < 10;
+                document.getElementById('crafting-modal').style.display = 'flex';
             });
-            
-            bindBtn('btn-tap-fire', () => { 
-                STATE.tapToFire = !STATE.tapToFire;
-                if (STATE.tapToFire) {
-                    STATE.savedStatic = STATE.staticJoysticks;
-                    STATE.savedAutoFire = STATE.autoFireMode;
-                    STATE.staticJoysticks = true; 
-                    STATE.autoFireMode = 2; 
-                } else {
-                    STATE.staticJoysticks = STATE.savedStatic;
-                    STATE.autoFireMode = STATE.savedAutoFire;
-                }
-                updateUIState(); saveGame(); 
-            });
-            
-            bindBtn('btn-auto-fire', () => { 
-                STATE.autoFireMode = (STATE.autoFireMode + 1) % 4; 
-                if (STATE.tapToFire) STATE.tapToFire = false; 
-                updateUIState(); saveGame(); 
-            });
-            
-            bindBtn('btn-toggle-debug', (el) => { STATE.showDebug = !STATE.showDebug; document.getElementById('debug-overlay').style.display = STATE.showDebug ? 'block' : 'none'; document.getElementById('btn-copy-log').style.display = STATE.showDebug ? 'block' : 'none'; el.classList.toggle('active'); });
-            
-            bindBtn('btn-copy-log', () => {
-                const text = DEBUG_LOG.join('\n');
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    navigator.clipboard.writeText(text).then(() => alert("Copied to clipboard")).catch(e => fallbackCopy(text));
-                } else {
-                    fallbackCopy(text);
+            bindBtn('btn-close-crafting', () => document.getElementById('crafting-modal').style.display = 'none');
+            bindBtn('btn-craft-base', () => {
+                if(PLAYER.inventory.parts >= 10) {
+                    document.getElementById('crafting-modal').style.display = 'none';
+                    STATE.placementMode = true;
+                    document.getElementById('placement-ui').style.display = 'flex';
                 }
             });
 
+            bindBtn('btn-cancel-place', () => { STATE.placementMode = false; document.getElementById('placement-ui').style.display = 'none'; });
+            bindBtn('btn-deploy-place', () => {
+                if(PLAYER.inventory.parts >= 10) {
+                    PLAYER.inventory.parts -= 10;
+                    BASES.push({x: PLAYER.x, y: PLAYER.y});
+                    PLAYER.respawnX = PLAYER.x; PLAYER.respawnY = PLAYER.y;
+                    stampBase(PLAYER.x, PLAYER.y, worldCanvas.getContext('2d', { willReadFrequently: true }));
+                    STATE.placementMode = false;
+                    document.getElementById('placement-ui').style.display = 'none';
+                    saveGame(); updateHUD(); showZoneMsg("BASE DEPLOYED");
+                }
+            });
+
+            bindBtn('btn-toggle-fps', () => { STATE.showFPS = !STATE.showFPS; document.getElementById('top-left-info').style.display = STATE.showFPS ? 'flex' : 'none'; updateUIState(); saveGame(); });
+            bindBtn('btn-static-joy', () => { STATE.staticJoysticks = !STATE.staticJoysticks; if (STATE.tapToFire) STATE.tapToFire = false; updateUIState(); saveGame(); });
+            bindBtn('btn-tap-fire', () => { 
+                STATE.tapToFire = !STATE.tapToFire;
+                if (STATE.tapToFire) { STATE.savedStatic = STATE.staticJoysticks; STATE.savedAutoFire = STATE.autoFireMode; STATE.staticJoysticks = true; STATE.autoFireMode = 2; 
+                } else { STATE.staticJoysticks = STATE.savedStatic; STATE.autoFireMode = STATE.savedAutoFire; }
+                updateUIState(); saveGame(); 
+            });
+            bindBtn('btn-auto-fire', () => { STATE.autoFireMode = (STATE.autoFireMode + 1) % 4; if (STATE.tapToFire) STATE.tapToFire = false; updateUIState(); saveGame(); });
+            bindBtn('btn-toggle-debug', (el) => { STATE.showDebug = !STATE.showDebug; document.getElementById('debug-overlay').style.display = STATE.showDebug ? 'block' : 'none'; document.getElementById('btn-copy-log').style.display = STATE.showDebug ? 'block' : 'none'; el.classList.toggle('active'); });
+            bindBtn('btn-copy-log', () => { const text = DEBUG_LOG.join('\n'); if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => alert("Copied")).catch(e => fallbackCopy(text)); else fallbackCopy(text); });
             bindBtn('btn-start-over', startOver);
             bindBtn('btn-clear-settings', clearSettings);
-            
             bindPress('btn-manual-fire', () => STATE.manualFirePressed = true, () => STATE.manualFirePressed = false);
         }
 
         function fallbackCopy(text) {
-            const textArea = document.createElement("textarea");
-            textArea.value = text;
-            textArea.style.position = "fixed";
-            textArea.style.opacity = "0";
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            try {
-                textArea.setSelectionRange(0, 99999);
-                document.execCommand('copy');
-                alert("Copied to clipboard");
-            } catch (err) {
-                alert("Copy failed. Please select text in debug log manually.");
-            }
+            const textArea = document.createElement("textarea"); textArea.value = text; textArea.style.position = "fixed"; textArea.style.opacity = "0";
+            document.body.appendChild(textArea); textArea.focus(); textArea.select();
+            try { textArea.setSelectionRange(0, 99999); document.execCommand('copy'); alert("Copied to clipboard"); } catch (err) { alert("Copy failed."); }
             document.body.removeChild(textArea);
         }
 
         // --- 13. WORLD GEN ---
-        // (Async Chunked Generation)
+        function stampBase(bx, by, wCtx) {
+            const startX = Math.max(0, Math.min(CONFIG.worldSize - 300, Math.floor(bx - 150)));
+            const startY = Math.max(0, Math.min(CONFIG.worldSize - 300, Math.floor(by - 150)));
+            
+            wCtx.fillStyle = '#555'; wCtx.fillRect(startX, startY, 300, 300);
+            
+            for(let y = startY; y < startY + 300; y++) {
+                for(let x = startX; x < startX + 300; x++) PHYSICS_MAP[y * CONFIG.worldSize + x] = 2; // Concrete
+            }
+            
+            const baseImg = wCtx.getImageData(startX, startY, 300, 300);
+            for(let i=0; i<baseImg.data.length; i+=4) {
+                const n = rng() * 20;
+                baseImg.data[i] = 80 + n; baseImg.data[i+1] = 80 + n; baseImg.data[i+2] = 80 + n; baseImg.data[i+3] = 255;
+            }
+            wCtx.putImageData(baseImg, startX, startY);
+        }
+
         function startGeneration() {
             const size = CONFIG.worldSize;
             const TEMP_MAP = new Uint8Array(size * size);
             worldCanvas = document.createElement('canvas');
-            worldCanvas.width = size;
-            worldCanvas.height = size;
+            worldCanvas.width = size; worldCanvas.height = size;
             const wCtx = worldCanvas.getContext('2d', { willReadFrequently: true });
 
-            wCtx.fillStyle = CONFIG.colors.land;
-            wCtx.fillRect(0, 0, size, size);
-
+            wCtx.fillStyle = CONFIG.colors.land; wCtx.fillRect(0, 0, size, size);
             const noiseScale = 0.003;
             
             function processNoise(y) {
@@ -1055,8 +1159,7 @@
                         }
                     }
                     y += chunkSize;
-                    const pct = Math.min(100, Math.round((y / size) * 40));
-                    document.getElementById('loading-bar-fill').style.width = pct + "%";
+                    document.getElementById('loading-bar-fill').style.width = Math.min(100, Math.round((y / size) * 40)) + "%";
                     if (y < size) requestAnimationFrame(() => processNoise(y));
                     else { PHYSICS_MAP = TEMP_MAP; processDespeckle(0, wCtx); }
                 } catch(e) { console.error("Noise Gen Error", e); }
@@ -1066,29 +1169,24 @@
 
         function processDespeckle(y, wCtx) {
             try {
-                const size = CONFIG.worldSize;
-                const chunkSize = 800;
+                const size = CONFIG.worldSize; const chunkSize = 800;
                 for (let row = 0; row < chunkSize; row++) {
                     if (y + row >= size - 1) break;
                     const cy = y + row;
                     if (cy === 0) continue;
                     for (let cx = 1; cx < size - 1; cx++) {
-                        const idx = cy * size + cx;
-                        const type = PHYSICS_MAP[idx];
+                        const idx = cy * size + cx; const type = PHYSICS_MAP[idx];
                         if (type === 1 || type === 3) {
                             let neighbors = 0;
                             for (let dy = -1; dy <= 1; dy++) {
-                                for (let dx = -1; dx <= 1; dx++) {
-                                    if (PHYSICS_MAP[(cy+dy)*size + (cx+dx)] === type) neighbors++;
-                                }
+                                for (let dx = -1; dx <= 1; dx++) { if (PHYSICS_MAP[(cy+dy)*size + (cx+dx)] === type) neighbors++; }
                             }
                             if (neighbors < 5) PHYSICS_MAP[idx] = 0;
                         }
                     }
                 }
                 y += chunkSize;
-                const pct = 40 + Math.min(100, Math.round((y / size) * 30));
-                document.getElementById('loading-bar-fill').style.width = pct + "%";
+                document.getElementById('loading-bar-fill').style.width = (40 + Math.min(100, Math.round((y / size) * 30))) + "%";
                 document.getElementById('loading-text').innerText = "Smoothing Terrain...";
                 if (y < size) requestAnimationFrame(() => processDespeckle(y, wCtx));
                 else processRender(0, wCtx);
@@ -1097,8 +1195,7 @@
 
         function processRender(y, wCtx) {
             try {
-                const size = CONFIG.worldSize;
-                const chunkSize = 800;
+                const size = CONFIG.worldSize; const chunkSize = 800;
                 const imgData = wCtx.getImageData(0, y, size, Math.min(chunkSize, size - y));
                 const data = imgData.data;
 
@@ -1106,52 +1203,37 @@
                     if (y + row >= size) break;
                     const cy = y + row;
                     for (let cx = 0; cx < size; cx++) {
-                        const idx = (row * size + cx) * 4;
-                        const pIdx = cy * size + cx;
-                        const type = PHYSICS_MAP[pIdx];
+                        const idx = (row * size + cx) * 4; const pIdx = cy * size + cx; const type = PHYSICS_MAP[pIdx];
                         if (type === 1) { data[idx]=26; data[idx+1]=38; data[idx+2]=47; data[idx+3]=255; }
-                        else if (type === 3) { 
-                            const grit = (rng() - 0.5) * 20;
-                            data[idx]=210+grit; data[idx+1]=180+grit; data[idx+2]=140+grit; data[idx+3]=255; 
-                        } else {
-                            const grit = (rng() - 0.5) * 20;
-                            data[idx]=75+grit; data[idx+1]=83+grit; data[idx+2]=32+grit; data[idx+3]=255;
-                        }
+                        else if (type === 3) { const grit = (rng() - 0.5) * 20; data[idx]=210+grit; data[idx+1]=180+grit; data[idx+2]=140+grit; data[idx+3]=255; } 
+                        else { const grit = (rng() - 0.5) * 20; data[idx]=75+grit; data[idx+1]=83+grit; data[idx+2]=32+grit; data[idx+3]=255; }
                     }
                 }
-                wCtx.putImageData(imgData, 0, y);
-                y += chunkSize;
-                const pct = 70 + Math.min(100, Math.round((y / size) * 30));
-                document.getElementById('loading-bar-fill').style.width = pct + "%";
+                wCtx.putImageData(imgData, 0, y); y += chunkSize;
+                document.getElementById('loading-bar-fill').style.width = (70 + Math.min(100, Math.round((y / size) * 30))) + "%";
                 document.getElementById('loading-text').innerText = "Rendering World...";
-                
                 if (y < size) requestAnimationFrame(() => processRender(y, wCtx));
                 else finishGeneration(wCtx);
             } catch(e) { console.error("Render Error", e); }
         }
 
         function finishGeneration(wCtx) {
-            const center = CONFIG.worldSize / 2;
-            const baseSize = 300;
-            
-            /*
-            wCtx.fillStyle = '#555'; wCtx.fillRect(center - baseSize/2, center - baseSize/2, baseSize, baseSize);
-            wCtx.fillStyle = "rgba(255,255,255,0.3)"; wCtx.font = "bold 40px Arial"; wCtx.textAlign = "center";
-            wCtx.fillText("MED BAY", center - 50, center - 90); wCtx.fillText("CASH BAY", center + 50, center - 90);
-
-            for(let by = center - baseSize/2; by < center + baseSize/2; by++) {
-                for(let bx = center - baseSize/2; bx < center + baseSize/2; bx++) {
-                    PHYSICS_MAP[Math.floor(by)*CONFIG.worldSize + Math.floor(bx)] = 2;
+            // Seed Floor Loot if new game
+            if (!STATE.hasSavedData) {
+                let attempts = 0;
+                while(FLOOR_LOOT.length < 150 && attempts < 2000) {
+                    attempts++;
+                    let lx = rng() * CONFIG.worldSize; let ly = rng() * CONFIG.worldSize;
+                    let idx = Math.floor(ly) * CONFIG.worldSize + Math.floor(lx);
+                    if (PHYSICS_MAP[idx] !== 1) { // Not deep water
+                        let r = rng(); let qty = r < 0.8 ? 1 : r < 0.98 ? 3 : 10;
+                        FLOOR_LOOT.push({ x: lx, y: ly, qty: qty });
+                    }
                 }
             }
-            
-            const baseImg = wCtx.getImageData(center - baseSize/2, center - baseSize/2, baseSize, baseSize);
-            for(let i=0; i<baseImg.data.length; i+=4) {
-                const n = rng() * 20;
-                baseImg.data[i] = 80 + n; baseImg.data[i+1] = 80 + n; baseImg.data[i+2] = 80 + n; baseImg.data[i+3] = 255;
-            }
-            wCtx.putImageData(baseImg, center - baseSize/2, center - baseSize/2);
-            */
+
+            // Stamp any saved bases
+            for (let b of BASES) stampBase(b.x, b.y, wCtx);
 
             console.log("Generation Complete");
             STATE.worldReady = true;
@@ -1169,6 +1251,7 @@
             document.getElementById('ui-layer').style.display = 'block';
             STATE.gameStarted = true;
             resetInputs();
+            updateHUD();
             requestAnimationFrame(gameLoop);
         };
 
@@ -1179,7 +1262,6 @@
             window.addEventListener('resize', resize);
             
             document.getElementById('loading-bar-container').style.display = 'block';
-            // Start Async Gen
             startGeneration();
 
             document.getElementById('btn-start').onclick = () => {
@@ -1204,10 +1286,8 @@
 
         // --- 15. BOOTSTRAP ---
         window.addEventListener('load', function() {
-            try {
-                if (window.initGame) window.initGame();
-                else throw new Error("initGame not found");
-            } catch (e) { console.error("BOOTSTRAP ERROR", e); }
+            try { if (window.initGame) window.initGame(); else throw new Error("initGame not found"); } 
+            catch (e) { console.error("BOOTSTRAP ERROR", e); }
         });
 
     </script>
